@@ -3,6 +3,12 @@ import numpy as np
 import pandas as pd
 
 from sklearn.utils import all_estimators
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    root_mean_squared_error,
+)
+
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 
@@ -159,15 +165,37 @@ def get_estimators(verbose=False):
 
     return estimators
 
+#================================================================================================
+
+def evaluate(y_true, y_pred, verbose=False):
+
+
+    metrics = {"mae": mean_absolute_error(y_true, y_pred), 
+               "rmse": root_mean_squared_error(y_true, y_pred), 
+               "mape": mean_absolute_percentage_error(y_true, y_pred)
+    }
+
+    return metrics
+
 
 if __name__ == "__main__":
+    print('info:')
     data = load_data(verbose=True)
     print(data)
     print(data.shape)
+    print("=" * 100)
 
     X_train, X_test, y_train, y_test = split_by_time(data, verbose=True)
     print(X_train.shape, X_test.shape)
+    print("=" * 100)
 
     estimators = get_estimators(verbose=True)
     print(len(estimators))
     print([name for name, _ in estimators])
+    print("=" * 100)
+
+    name, cls = estimators[0]
+    model = cls()
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    print(name, evaluate(y_test, y_pred, verbose=True))
