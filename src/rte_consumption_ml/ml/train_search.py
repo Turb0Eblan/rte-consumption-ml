@@ -2,7 +2,27 @@ import holidays
 import numpy as np
 import pandas as pd
 
+from sklearn.utils import all_estimators
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
+EXCLUDED = {
+    "KernelRidge",
+    "GaussianProcessRegressor",
+    "SVR",
+    "NuSVR",
+    "QuantileRegressor",
+    "TheilSenRegressor",
+    "RadiusNeighborsRegressor",
+    "StackingRegressor",
+    "VotingRegressor",
+    "MultiOutputRegressor",
+    "RegressorChain",
+    "IsotonicRegression",
+    "CCA",
+    "PLSCanonical"
+            } # excluding models that failed with an error
 
 def load_data(verbose: bool = False) -> pd.DataFrame:
     # temporary gold table for test
@@ -14,7 +34,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     if verbose:
         print('df')
         print(df)
-        print("=" * 40)
+        print("=" * 100)
 
     #====================================================================
     
@@ -31,7 +51,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     if verbose:
         print('calendar example')
         print(df)
-        print("=" * 40)
+        print("=" * 100)
 
     #====================================================================
 
@@ -50,7 +70,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     if verbose:
         print('fake consumption')
         print(df)
-        print("=" * 40)
+        print("=" * 100)
 
     #====================================================================
 
@@ -66,7 +86,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     if verbose:
         print('lag')
         print(df)
-        print("=" * 40)
+        print("=" * 100)
 
     return df.dropna().reset_index(drop=True)
 
@@ -79,28 +99,28 @@ def split_by_time(df, test_days=30, verbose=False):
     if verbose:
         print('last_ts')
         print(last_ts)
-        print("=" * 40)
+        print("=" * 100)
 
     border = last_ts - pd.Timedelta(days=test_days)
 
     if verbose:
         print('border')
         print(border)
-        print("=" * 40)
+        print("=" * 100)
 
     train = df[df["ts"] <= border]
 
     if verbose:
         print('train')
         print(train)
-        print("=" * 40)
+        print("=" * 100)
 
     test = df[df["ts"] > border]
 
     if verbose:
         print('test')
         print(test)
-        print("=" * 40)
+        print("=" * 100)
 
 
     X_train = train.drop(columns=["ts", "consumption_mw"])
@@ -112,13 +132,32 @@ def split_by_time(df, test_days=30, verbose=False):
     if verbose:
         print('X_train')
         print(X_train)
-        print("=" * 40)
+        print("=" * 100)
         print('y_train')
         print(y_train)
-        print("=" * 40)
+        print("=" * 100)
 
 
     return X_train, X_test, y_train, y_test
+
+#================================================================================================
+
+def get_estimators(verbose=False):
+
+    all_regs = all_estimators(type_filter="regressor")
+
+    if verbose:
+        print('all_regs')
+        print(len(all_regs))
+        print("=" * 100)
+
+    estimators = [(name, cls) for name, cls in all_regs if name not in EXCLUDED]
+
+    estimators.append(("XGBRegressor", XGBRegressor))
+    estimators.append(("LGBMRegressor", LGBMRegressor))
+
+
+    return estimators
 
 
 if __name__ == "__main__":
@@ -128,3 +167,7 @@ if __name__ == "__main__":
 
     X_train, X_test, y_train, y_test = split_by_time(data, verbose=True)
     print(X_train.shape, X_test.shape)
+
+    estimators = get_estimators(verbose=True)
+    print(len(estimators))
+    print([name for name, _ in estimators])
