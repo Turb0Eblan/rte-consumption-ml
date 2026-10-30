@@ -12,6 +12,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     df = pd.DataFrame({"ts": ts})
 
     if verbose:
+        print('df')
         print(df)
         print("=" * 40)
 
@@ -28,6 +29,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     df['is_holiday'] = df["ts"].dt.date.isin(list((fr_holidays.keys())))
 
     if verbose:
+        print('calendar example')
         print(df)
         print("=" * 40)
 
@@ -46,6 +48,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     )
 
     if verbose:
+        print('fake consumption')
         print(df)
         print("=" * 40)
 
@@ -61,12 +64,67 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     )
 
     if verbose:
+        print('lag')
         print(df)
         print("=" * 40)
 
     return df.dropna().reset_index(drop=True)
 
+#================================================================================================
+
+def split_by_time(df, test_days=30, verbose=False):
+
+    last_ts = df["ts"].max()
+
+    if verbose:
+        print('last_ts')
+        print(last_ts)
+        print("=" * 40)
+
+    border = last_ts - pd.Timedelta(days=test_days)
+
+    if verbose:
+        print('border')
+        print(border)
+        print("=" * 40)
+
+    train = df[df["ts"] <= border]
+
+    if verbose:
+        print('train')
+        print(train)
+        print("=" * 40)
+
+    test = df[df["ts"] > border]
+
+    if verbose:
+        print('test')
+        print(test)
+        print("=" * 40)
+
+
+    X_train = train.drop(columns=["ts", "consumption_mw"])
+    X_test = test.drop(columns=["ts", "consumption_mw"])
+
+    y_train = train["consumption_mw"]
+    y_test = test["consumption_mw"]
+
+    if verbose:
+        print('X_train')
+        print(X_train)
+        print("=" * 40)
+        print('y_train')
+        print(y_train)
+        print("=" * 40)
+
+
+    return X_train, X_test, y_train, y_test
+
+
 if __name__ == "__main__":
     data = load_data(verbose=True)
     print(data)
     print(data.shape)
+
+    X_train, X_test, y_train, y_test = split_by_time(data, verbose=True)
+    print(X_train.shape, X_test.shape)
