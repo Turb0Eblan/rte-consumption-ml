@@ -1,6 +1,7 @@
 import holidays
 import numpy as np
 import pandas as pd
+import mlflow
 
 from sklearn.utils import all_estimators
 from sklearn.metrics import (
@@ -11,24 +12,30 @@ from sklearn.metrics import (
 
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
+from datetime import date
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
 EXCLUDED = {
-    "KernelRidge",
-    "GaussianProcessRegressor",
+        # too slow or too much memory on ~120k rows
+    "KernelRidge",               # n x n kernel matrix
+    "GaussianProcessRegressor",  # n x n matrix, O(n^3)
     "SVR",
     "NuSVR",
     "QuantileRegressor",
     "TheilSenRegressor",
     "RadiusNeighborsRegressor",
+    # need required constructor args
     "StackingRegressor",
     "VotingRegressor",
     "MultiOutputRegressor",
     "RegressorChain",
-    "IsotonicRegression",
-    "CCA",
-    "PLSCanonical"
-            } # excluding models that failed with an error
+    # unsuitable for this task
+    "IsotonicRegression",  # only one feature
+    "CCA",                 # multi-target models
+    "PLSCanonical",
+} # excluding models that failed with an error
+
+#================================================================================================
 
 def load_data(verbose: bool = False) -> pd.DataFrame:
     # temporary gold table for test
@@ -42,7 +49,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
         print(df)
         print("=" * 100)
 
-    #====================================================================
+    #=======================================
     
     # calendar example (for future table)
 
@@ -59,7 +66,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
         print(df)
         print("=" * 100)
 
-    #====================================================================
+    #=======================================
 
     # fake target: base + seasons + daily cycle + weekend/holiday dip + noise
 
@@ -78,7 +85,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
         print(df)
         print("=" * 100)
 
-    #====================================================================
+    #========================================
 
     # lag example (for future table)
 
@@ -167,18 +174,53 @@ def get_estimators(verbose=False):
 
 #================================================================================================
 
-def evaluate(y_true, y_pred, verbose=False):
+def evaluate(y_true, y_pred):
 
 
-    metrics = {"mae": mean_absolute_error(y_true, y_pred), 
-               "rmse": root_mean_squared_error(y_true, y_pred), 
-               "mape": mean_absolute_percentage_error(y_true, y_pred)
+    metrics = {
+        "mae": mean_absolute_error(y_true, y_pred), 
+        "rmse": root_mean_squared_error(y_true, y_pred), 
+        "mape": mean_absolute_percentage_error(y_true, y_pred)
     }
+
 
     return metrics
 
+#================================================================================================
 
-if __name__ == "__main__":
+def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
+
+    mlflow.set_experiment("rte-model-search")
+
+    for name, cls in estimators:
+        with mlflow.start_run(run_name=name):
+            try:
+                mlflow.log_param("estimator", name)
+                today = date.today().isoformat
+                mlflow.set_tag("search_date", today)
+                model = cls()
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+                metrics = evaluate(y_test, y_pred)
+                mlflow.log_metrics(metrics)
+                
+
+
+                if verbose:
+                    print('model:', name)
+                    print("=" * 100)
+                    print('metrics', metrics)
+                    print("=" * 100)
+
+                    
+            except Exception as e:
+                mlflow.set_tag("status", "failed")
+                print('failed:', name, e)
+                print("=" * 100)
+
+#================================================================================================
+
+def main():
     print('info:')
     data = load_data(verbose=True)
     print(data)
@@ -194,8 +236,9 @@ if __name__ == "__main__":
     print([name for name, _ in estimators])
     print("=" * 100)
 
-    name, cls = estimators[0]
-    model = cls()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    print(name, evaluate(y_test, y_pred, verbose=True))
+    run_search(estimators, X_train, X_test, y_train, y_test, verbose=True)
+
+#================================================================================================
+
+if __name__ == "__main__":
+    main()
