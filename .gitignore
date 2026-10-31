@@ -166,6 +166,7 @@ venv.bak/
 # Local data and MLflow output
 /data/
 /mlruns/
+mlflow.db
 /mlartifacts/
 
 
