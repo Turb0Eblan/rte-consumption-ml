@@ -2,6 +2,9 @@ import mlflow
 
 from datetime import date
 from rte_consumption_ml.ml.banner import LOGO
+from rte_consumption_ml.ml.train_search import get_estimators, load_data
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 
 def get_best_run(experiment_name="rte-model-search", verbose=False):
@@ -27,19 +30,47 @@ def get_best_run(experiment_name="rte-model-search", verbose=False):
 
     return runs.iloc[0]
 
+#================================================================================================
+
+def build_model(estimator_name):
+
+    estimators = dict(get_estimators())
+    cls = estimators[estimator_name]
+
+    return make_pipeline(StandardScaler(), cls())
+
+#================================================================================================
 
 def main():
 
-    print_setting = True # True for debugging  
+    print_setting = False # True for debugging  
 
     best = get_best_run(verbose=print_setting)
     
     print(LOGO)
+    print("=" * 100)
     print(
-            'Best name:', best["params.estimator"], 
-            'Best metric:', best["metrics.mape"], 
-            "Best id:", best["run_id"]
-        )
+        'Best name:', best["params.estimator"], 
+        'Best metric:', best["metrics.mape"], 
+        "Best id:", best["run_id"]
+    )
+    print("=" * 100)
+
+    name = best["params.estimator"]
+
+    data = load_data()
+    X = data.drop(columns=["ts", "consumption_mw"])
+    y = data["consumption_mw"]
+
+    model = build_model(name)
+
+    if print_setting:
+        print('model')
+        print(model)
+        print("=" * 100)
+    
+    model.fit(X, y)
+    print("Trained:", name, "on", len(X), "rows")
 
 
 if __name__ == "__main__":
