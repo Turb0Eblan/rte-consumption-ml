@@ -13,9 +13,10 @@ from sklearn.metrics import (
 
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
-from datetime import date
+from datetime import date, datetime
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from rte_consumption_ml.ml.banner import LOGO
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
 EXCLUDED = {
@@ -199,6 +200,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
 
     mlflow.set_experiment("rte-model-search")
     today = date.today().isoformat()
+    search_id = datetime.now().isoformat(timespec="seconds")
 
 
     for i, (name, cls) in enumerate(estimators, start=1):
@@ -207,6 +209,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
             try:
                 mlflow.log_param("estimator", name)
                 mlflow.set_tag("search_date", today)
+                mlflow.set_tag("search_id", search_id)
                 model = make_pipeline(StandardScaler(), cls())
 
                 start = time.perf_counter()
@@ -253,16 +256,6 @@ def main():
     print([name for name, _ in estimators])
     print("=" * 100)
 
-    LOGO = """
- █████  █████████   █████████
-  ████  █████████   █████████
-   ███  ██████████     ███
-    ██  ██████ ███     ███
-█    █  ██████  ███    ███
-███     ███████████    ███
-████    █████████████████████
-█████   ████     ████████████
-"""
     print(LOGO)
     print(f"RTE model search | {date.today()} | {len(estimators)} estimators")
 
