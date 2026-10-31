@@ -2,6 +2,7 @@ import holidays
 import numpy as np
 import pandas as pd
 import mlflow
+import time
 
 from sklearn.utils import all_estimators
 from sklearn.metrics import (
@@ -13,10 +14,12 @@ from sklearn.metrics import (
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from datetime import date
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
 EXCLUDED = {
-        # too slow or too much memory on ~120k rows
+    # too slow or too much memory on ~120k rows
     "KernelRidge",               # n x n kernel matrix
     "GaussianProcessRegressor",  # n x n matrix, O(n^3)
     "SVR",
@@ -33,7 +36,11 @@ EXCLUDED = {
     "IsotonicRegression",  # only one feature
     "CCA",                 # multi-target models
     "PLSCanonical",
-} # excluding models that failed with an error
+    "MultiTaskElasticNet",
+    "MultiTaskElasticNetCV",
+    "MultiTaskLasso",
+    "MultiTaskLassoCV",
+}
 
 #================================================================================================
 
@@ -70,7 +77,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
 
     # fake target: base + seasons + daily cycle + weekend/holiday dip + noise
 
-    day_of_year = df["ts"].dt.dayofyear
+    day_of_year = df["ts"].dt.day_of_year
     df["consumption_mw"] = (
         50_000
         + 12_000 * np.cos(2 * np.pi * day_of_year / 365.25)  # winter high, summer low
@@ -191,17 +198,24 @@ def evaluate(y_true, y_pred):
 def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
 
     mlflow.set_experiment("rte-model-search")
+    today = date.today().isoformat()
 
-    for name, cls in estimators:
+
+    for i, (name, cls) in enumerate(estimators, start=1):
+        print(f"[{i}/{len(estimators)}] {i / len(estimators) * 100:.0f}% {name}")
         with mlflow.start_run(run_name=name):
             try:
                 mlflow.log_param("estimator", name)
-                today = date.today().isoformat
                 mlflow.set_tag("search_date", today)
-                model = cls()
+                model = make_pipeline(StandardScaler(), cls())
+
+                start = time.perf_counter()
                 model.fit(X_train, y_train)
+                fit_seconds = time.perf_counter() - start
+
                 y_pred = model.predict(X_test)
                 metrics = evaluate(y_test, y_pred)
+                metrics["fit_seconds"] = fit_seconds
                 mlflow.log_metrics(metrics)
                 
 
@@ -221,22 +235,38 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
 #================================================================================================
 
 def main():
+
+    print_setting = False # True for debugging
+
     print('info:')
-    data = load_data(verbose=True)
+    data = load_data(verbose=print_setting)
     print(data)
     print(data.shape)
     print("=" * 100)
 
-    X_train, X_test, y_train, y_test = split_by_time(data, verbose=True)
+    X_train, X_test, y_train, y_test = split_by_time(data, verbose=print_setting)
     print(X_train.shape, X_test.shape)
     print("=" * 100)
 
-    estimators = get_estimators(verbose=True)
+    estimators = get_estimators(verbose=print_setting)
     print(len(estimators))
     print([name for name, _ in estimators])
     print("=" * 100)
 
-    run_search(estimators, X_train, X_test, y_train, y_test, verbose=True)
+    LOGO = """
+ █████  █████████   █████████
+  ████  █████████   █████████
+   ███  ██████████     ███
+    ██  ██████ ███     ███
+█    █  ██████  ███    ███
+███     ███████████    ███
+████    █████████████████████
+█████   ████     ████████████
+"""
+    print(LOGO)
+    print(f"RTE model search | {date.today()} | {len(estimators)} estimators")
+
+    run_search(estimators, X_train, X_test, y_train, y_test, verbose=print_setting)
 
 #================================================================================================
 
