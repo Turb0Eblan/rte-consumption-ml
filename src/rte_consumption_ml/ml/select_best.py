@@ -1,4 +1,6 @@
 import mlflow
+import joblib
+import os
 
 from datetime import date
 from rte_consumption_ml.ml.banner import LOGO
@@ -41,6 +43,16 @@ def build_model(estimator_name):
 
 #================================================================================================
 
+def save_model(model, path="models/best_model.joblib"):
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    joblib.dump(model, path)
+
+    print("Saved model to", path)
+
+#================================================================================================
+
 def main():
 
     print_setting = False # True for debugging  
@@ -71,6 +83,8 @@ def main():
     
     model.fit(X, y)
     print("Trained:", name, "on", len(X), "rows")
+
+    save_model(model)
 
 
 if __name__ == "__main__":
