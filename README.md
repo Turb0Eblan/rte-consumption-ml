@@ -92,3 +92,49 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+
+## Local development setup
+
+Requirements:
+- Git
+- uv
+- Python >=3.12.1 and <3.13
+
+The selected development Python version is recorded in `.python-version`.
+
+### Install the environment
+
+```powershell
+uv sync --locked
+```
+
+### Configure local credentials
+
+Copy `.env.example` to `.env` and fill in your own RTE credentials:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Never commit `.env`, access tokens, or client secrets.
+
+Configuration is loaded through
+`rte_consumption_ml.config.load_settings()`.
+Existing environment variables take precedence over `.env` values.
+
+### Run Python
+
+```powershell
+uv run python --version
+```
+
+### Project structure
+
+- `src/rte_consumption_ml/`: project package
+- `src/rte_consumption_ml/config.py`: configuration loading
+- `src/rte_consumption_ml/ml/`: machine learning modules
+- `.env.example`: configuration template without credentials
+- `pyproject.toml`: project metadata and dependencies
+- `uv.lock`: resolved dependency versions
+
+The local `.venv`, data directory, and MLflow outputs are ignored by Git.
