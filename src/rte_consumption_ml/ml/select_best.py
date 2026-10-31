@@ -1,6 +1,7 @@
 import mlflow
 import joblib
 import os
+import pandas as pd
 
 from datetime import date
 from rte_consumption_ml.ml.banner import LOGO
@@ -53,6 +54,20 @@ def save_model(model, path="models/best_model.joblib"):
 
 #================================================================================================
 
+def log_best(best, path="models/best_models.csv"):
+
+    row = pd.DataFrame([{ 
+        "date": date.today().isoformat(),
+        "estimator": best["params.estimator"],
+        "mape": best["metrics.mape"],
+        "run_id": best["run_id"]
+    }])
+    row.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+    print("Logged best model to", path)
+
+#================================================================================================
+
 def main():
 
     print_setting = False # True for debugging  
@@ -85,6 +100,8 @@ def main():
     print("Trained:", name, "on", len(X), "rows")
 
     save_model(model)
+
+    log_best(best)
 
 
 if __name__ == "__main__":
