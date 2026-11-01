@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 # the job runs this file directly, so make src/ importable
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(sys.argv[0]).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from rte_consumption_ml.ml import predict, select_best, train_search
