@@ -5,16 +5,17 @@ import joblib
 import pandas as pd
 
 from rte_consumption_ml.ml.banner import LOGO
+from rte_consumption_ml.ml.settings import MODELS_DIR
 from rte_consumption_ml.ml.train_search import add_calendar, load_data
 
 
-def load_model(path="models/best_model.joblib"):
+def load_model(path=f"{MODELS_DIR}/best_model.joblib"):
 
     return joblib.load(path)
 
 #================================================================================================
 
-def load_best_name(path="models/best_models.csv"):
+def load_best_name(path=f"{MODELS_DIR}/best_models.csv"):
 
     log = pd.read_csv(path)
 
@@ -46,7 +47,7 @@ def make_d1_features(verbose=False):
 
 #================================================================================================
 
-def save_predictions(ts, y_pred, estimator, path="models/predictions.csv"):
+def save_predictions(ts, y_pred, estimator, path=f"{MODELS_DIR}/predictions.csv"):
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -69,8 +70,8 @@ def main():
     print(LOGO)
     print("=" * 100)
 
-    model = load_model()
-    name = load_best_name()
+    model = load_model(path=f"{MODELS_DIR}/best_model.joblib")
+    name = load_best_name(path=f"{MODELS_DIR}/best_models.csv")
 
     if print_setting:
         print('model')
