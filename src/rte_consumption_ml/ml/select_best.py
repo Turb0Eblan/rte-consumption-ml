@@ -8,6 +8,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from rte_consumption_ml.ml.banner import LOGO
+from rte_consumption_ml.ml.settings import MODELS_DIR
 from rte_consumption_ml.ml.train_search import get_estimators, load_data
 
 
@@ -20,12 +21,21 @@ def get_best_run(experiment_name="rte-model-search", verbose=False):
         filter_string=f"tags.search_date = '{today}'",
         order_by=["metrics.mape ASC"],
     )
-    runs = runs.dropna(subset=["metrics.mape"])
+
+    # nothing logged today -> clear error instead of KeyError
+    needed = ["tags.search_id", "metrics.mape"]
+    if runs.empty or not all(col in runs.columns for col in needed):
+        raise ValueError(f"No search runs found for {today}")
+
+    # take the latest search FIRST, even if all its models failed
     last_search = runs["tags.search_id"].max()
     runs = runs[runs["tags.search_id"] == last_search]
 
+    # only then drop failed models
+    runs = runs.dropna(subset=["metrics.mape"])
+
     if runs.empty:
-        raise ValueError(f"No successful runs found for {today}")
+        raise ValueError(f"Search {last_search} has no successful runs")
 
     if verbose:
         print('runs')
@@ -100,9 +110,9 @@ def main():
     model.fit(X, y)
     print("Trained:", name, "on", len(X), "rows")
 
-    save_model(model)
+    save_model(model, path=f"{MODELS_DIR}/best_model.joblib")
 
-    log_best(best)
+    log_best(best, path=f"{MODELS_DIR}/best_models.csv")
 
 
 if __name__ == "__main__":
