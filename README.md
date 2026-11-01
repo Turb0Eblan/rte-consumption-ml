@@ -34,8 +34,14 @@ The catalog is `workspace` with one schema per layer:
 | Gold | `workspace.gold.best_models` | best estimator and its MAPE for each day |
 | Gold | `workspace.gold.predictions` | D+1 forecasts |
 
+The daily Bronze download (`bronze_daily.py`) runs from a GitLab CI job and
+not from Databricks, because Databricks serverless could not reach the RTE API
+(DNS errors). It uploads the files to the volume through the Databricks API.
+Each run downloads the last three months again, so revisions from RTE are
+picked up.
+
 More details on the data side are in `docs/databricks_architecture.md`,
-`docs/silver_transform.md` and `docs/gold_features.md`.
+`docs/bronze_daily.md`, `docs/silver_transform.md` and `docs/gold_features.md`.
 
 ## Case study
 
@@ -166,8 +172,8 @@ weather data, which is the main thing that would improve the forecast.
   past through yearly features.
 - No temperature or weather features.
 - Six autumn DST days are missing from the history.
-- Databricks serverless could not reach the RTE API during our tests (DNS
-  errors), so daily Bronze ingestion is still being worked on.
+- Bronze runs in GitLab CI and the ML job runs in Databricks, so the two are
+  scheduled separately.
 
 ## Team
 
