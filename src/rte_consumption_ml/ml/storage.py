@@ -12,10 +12,13 @@ def append_rows(df, table, csv_path):
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
+        spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
         spark.createDataFrame(df).write.mode("append").saveAsTable(table)
+        print("Appended", len(df), "rows to", table)
     else:
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         df.to_csv(csv_path, mode="a", header=not os.path.exists(csv_path), index=False)
+        print("Appended", len(df), "rows to", csv_path)
 
 
 def read_rows(table, csv_path):
@@ -23,5 +26,6 @@ def read_rows(table, csv_path):
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
+        spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
         return spark.table(table).toPandas()
     return pd.read_csv(csv_path)

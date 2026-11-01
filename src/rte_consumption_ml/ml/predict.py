@@ -58,12 +58,10 @@ def save_predictions(ts, y_pred, estimator, path=f"{MODELS_DIR}/predictions.csv"
         "ts": ts,
         "prediction_mw": y_pred,
         "estimator": estimator,
-        "predicted_on": date.today().isoformat(),
+        "predicted_on": date.today(),
     })
 
     append_rows(rows, "workspace.gold.predictions", path)
-
-    print("Saved", len(rows), "predictions to", path)
 
 #================================================================================================
 

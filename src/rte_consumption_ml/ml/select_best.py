@@ -69,16 +69,14 @@ def save_model(model, path="models/best_model.joblib"):
 def log_best(best, path="models/best_models.csv"):
 
     row = pd.DataFrame([{ 
-        "date": date.today().isoformat(),
+        "date": date.today(),
         "estimator": best["params.estimator"],
         "mape": best["metrics.mape"],
         "run_id": best["run_id"],
-        "logged_at": datetime.now().isoformat(timespec="seconds"),
+        "logged_at": datetime.now(),
     }])
 
     append_rows(row, "workspace.gold.best_models", path)
-
-    print("Logged best model to", path)
 
 #================================================================================================
 
