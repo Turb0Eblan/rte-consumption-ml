@@ -1,140 +1,177 @@
 # rte-consumption-ml
 
-Hello world
+ENSE3 Machine Learning project, group 4 (Artur Nam, Fady Abuisaac).
 
+We forecast French electricity consumption for the next day (D+1) at 30 minute
+resolution, using RTE open data. Everything runs on Databricks Free Edition:
+a data pipeline builds the Bronze, Silver and Gold layers, a daily ML job picks
+the best model and makes the forecast, and a dashboard shows the results.
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## How it works
 
 ```
-cd existing_repo
-git remote add origin https://gricad-gitlab.univ-grenoble-alpes.fr/ense3-ml-g4-artur-fady/rte-consumption-ml.git
-git branch -M main
-git push -uf origin main
+RTE API
+  |
+Bronze   raw JSON files in a volume, one folder per day
+  |
+Silver   cleaned 30 min consumption table, bad days go to quarantine
+  |
+Gold     features for the model + 48 empty rows for tomorrow
+  |
+ML job   search -> select -> predict
+  |
+Dashboard
 ```
 
-## Integrate with your tools
+The catalog is `workspace` with one schema per layer:
 
-* [Set up project integrations](https://gricad-gitlab.univ-grenoble-alpes.fr/ense3-ml-g4-artur-fady/rte-consumption-ml/-/settings/integrations)
+| Layer | Object | What is inside |
+|---|---|---|
+| Bronze | `/Volumes/workspace/bronze/rte_raw/YYYY/MM/DD` | raw API responses |
+| Silver | `workspace.silver.consumption` | one row per 30 min interval (UTC) |
+| Gold | `workspace.gold.features` | target and features |
+| Gold | `/Volumes/workspace/gold/models` | saved best model |
+| Gold | `workspace.gold.best_models` | best estimator and its MAPE for each day |
+| Gold | `workspace.gold.predictions` | D+1 forecasts |
 
-## Collaborate with your team
+More details on the data side are in `docs/databricks_architecture.md`,
+`docs/silver_transform.md` and `docs/gold_features.md`.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Case study
 
-## Test and Deploy
+Target: `consumption_mw`, the consolidated consumption of France in MW,
+for every half hour of tomorrow.
 
-Use the built-in continuous integration in GitLab.
+RTE publishes consolidated data with a delay of about two months (when we
+checked on 2026-10-31 the latest month was August 2026). So yesterday or last
+week is simply not available when we forecast tomorrow, and lags like D-1 or
+D-7 were not an option. We use the same day one year back instead:
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+| Feature | Meaning |
+|---|---|
+| `half_hour` | slot of the day, 0 to 47 (Paris time) |
+| `day_of_week` | Monday = 0 |
+| `month`, `day_of_year` | season |
+| `is_holiday` | French public holiday |
+| `lag_364d` | consumption 364 days earlier, same half hour |
+| `rolling_mean_7d_364` | mean of the same half hour over days 364 to 370 back, needs at least 5 of the 7 days |
 
-***
+364 is a multiple of 7, so a Monday is compared with a Monday.
 
-# Editing this README
+All times are in Europe/Paris for the calendar features. On the autumn DST day
+there are 50 half hours, in spring 46. The six autumn DST days from 2020 to
+2025 had inconsistent data and are quarantined in Silver.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Metric: MAPE is used to choose the best model, MAE and RMSE are logged too.
+The last 30 days of history are the test set, no shuffling.
 
-## Suggestions for a good README
+## ML pipeline
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Code is in `src/rte_consumption_ml/ml/`.
 
-## Name
-Choose a self-explaining name for your project.
+1. `train_search.py` takes every regressor from `sklearn.utils.all_estimators()`
+   plus XGBoost and LightGBM, trains each one in a pipeline with
+   `StandardScaler` and logs the metrics to MLflow (experiment
+   `/Shared/rte-model-search`). A few models are excluded because they need
+   n x n memory or extra arguments, the list with reasons is in the file.
+   Every search gets a `search_id` tag.
+2. `select_best.py` reads the runs of the latest search, takes the lowest
+   MAPE, retrains that model on all the data and saves it with joblib to the
+   models volume. It also appends a row to `workspace.gold.best_models`.
+3. `predict.py` loads the model, reads tomorrow's rows from Gold
+   (`consumption_mw IS NULL`) and writes 48 predictions to
+   `workspace.gold.predictions`. If Gold still has the rows of another day it
+   stops with an error instead of predicting the wrong date.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Training uses only rows where `consumption_mw`, `lag_364d` and
+`rolling_mean_7d_364` are all present (98,914 rows on 2026-11-01).
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+When the code runs outside Databricks it uses generated fake data with the
+same columns and writes CSV files to `models/`, so the scripts can be tested
+without a cluster. `ml/settings.py` checks `DATABRICKS_RUNTIME_VERSION` to
+decide which mode to use.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Databricks job
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Job name: `rte-ml-daily`. It runs `jobs/run_step.py` three times, each task
+depends on the previous one:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+| Task | Parameter |
+|---|---|
+| search | `["search"]` |
+| select | `["select"]` |
+| predict | `["predict"]` |
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Settings we used:
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+- Source: Git provider (this repository), so every run takes the latest commit
+- Compute: serverless
+- Environment: Standard v6 (Python 3.12) with the extra packages
+  `xgboost-cpu`, `lightgbm`, `holidays`. We did not use the pyproject.toml
+  option because it would replace the pandas and MLflow versions that come
+  with Databricks.
+- A full run takes about 11 minutes, most of it is the model search.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+The Gold table has to be rebuilt each morning before this job, because that
+is what creates tomorrow's rows.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Dashboard
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+"RTE consumption forecast" in Databricks, built from two SQL datasets:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+- `best_models_15d`: last row of each day from `best_models`, last 15 days
+- `predictions_15d`: forecasts of the last 15 days, converted to Paris time
 
-## License
-For open source projects, say how it is licensed.
+It has a table with the best estimator per day, a line chart of its MAPE, and
+the D+1 forecast curve.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+## Running locally
 
-## Local development setup
+You need Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
-Requirements:
-- Git
-- uv
-- Python >=3.12.1 and <3.13
-
-The selected development Python version is recorded in `.python-version`.
-
-### Install the environment
-
-```powershell
-uv sync --locked
+```bash
+uv sync
+cp .env.example .env    # fill in your RTE credentials, never commit this file
 ```
 
-### Configure local credentials
+ML scripts on fake data:
 
-Copy `.env.example` to `.env` and fill in your own RTE credentials:
-
-```powershell
-Copy-Item .env.example .env
+```bash
+uv run python jobs/run_step.py search
+uv run python jobs/run_step.py select
+uv run python jobs/run_step.py predict
 ```
 
-Never commit `.env`, access tokens, or client secrets.
+MLflow results can be viewed with `uv run mlflow ui`.
 
-Configuration is loaded through
-`rte_consumption_ml.config.load_settings()`.
-Existing environment variables take precedence over `.env` values.
+Data scripts have self tests that do not need Spark:
 
-### Run Python
-
-```powershell
-uv run python --version
+```bash
+uv run python -m rte_consumption_ml.silver_transform --self-test
+uv run python -m rte_consumption_ml.gold_features --self-test
 ```
 
-### Project structure
+## Results
 
-- `src/rte_consumption_ml/`: project package
-- `src/rte_consumption_ml/config.py`: configuration loading
-- `src/rte_consumption_ml/ml/`: machine learning modules
-- `.env.example`: configuration template without credentials
-- `pyproject.toml`: project metadata and dependencies
-- `uv.lock`: resolved dependency versions
+First run on real data (2026-11-01): the best model was
+OrthogonalMatchingPursuit with MAPE 3.14%.
 
-The local `.venv`, data directory, and MLflow outputs are ignored by Git.
+Keep in mind that the test period is August 2026, when consumption is low and
+stable. We expect a higher error in November with heating. We also have no
+weather data, which is the main thing that would improve the forecast.
+
+## Known limitations
+
+- Consolidated data arrives about two months late, so the model only knows the
+  past through yearly features.
+- No temperature or weather features.
+- Six autumn DST days are missing from the history.
+- Databricks serverless could not reach the RTE API during our tests (DNS
+  errors), so daily Bronze ingestion is still being worked on.
+
+## Team
+
+| | |
+|---|---|
+| Fady Abuisaac | project setup, RTE API, Bronze, Silver, Gold, data architecture |
+| Artur Nam | case study, model search, model selection, serving, Databricks job, dashboard |
