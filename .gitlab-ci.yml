@@ -93,3 +93,203 @@ bronze_network_probe:
         sys.exit(1)
     print("PASS: both endpoints returned an HTTP response.")
     PY
+
+# SAST and secret detection remain enabled.
+stages:
+- test
+- secret-detection
+sast:
+  stage: test
+include:
+- template: Security/SAST.gitlab-ci.yml
+- template: Security/Secret-Detection.gitlab-ci.yml
+variables:
+  SECRET_DETECTION_ENABLED: 'true'
+secret_detection:
+  stage: secret-detection
+
+# Manual diagnostic only. HTTP reachability does not verify authentication.
+# No credentials, response bodies or headers are printed.
+bronze_network_probe:
+  stage: test
+  image: python:3.12-slim
+  timeout: 5 minutes
+  allow_failure: true
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    when: never
+  - when: manual
+  script:
+  - |
+    python -u - <<'PY'
+    import sys
+    import urllib.error
+    import urllib.request
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect())
+    targets = [
+        (
+            "RTE API",
+            "https://digital.iservices.rte-france.com/open_api/"
+            "consolidated_consumption/v1/consolidated_power_consumption",
+        ),
+        (
+            "Databricks Files API",
+            "https://dbc-ef009879-5f31.cloud.databricks.com/"
+            "api/2.0/fs/directories/Volumes/workspace/bronze/rte_raw",
+        ),
+    ]
+    failed = False
+    for label, url in targets:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "rte-consumption-ml-network-probe"}
+        )
+        try:
+            with opener.open(request, timeout=20) as response:
+                status = response.status
+        except urllib.error.HTTPError as error:
+            status = error.code
+            error.close()
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            reason = getattr(error, "reason", error)
+            print(f"FAIL {label}: {type(reason).__name__}", flush=True)
+            failed = True
+            continue
+        print(f"REACHED {label}: HTTP {status}", flush=True)
+        if not 200 <= status < 500:
+            failed = True
+    print("No credentials were used. HTTP 401/403 may be expected for this probe.")
+    print("Authentication, API authorization and volume writes are NOT verified.")
+    if failed:
+        print("REVIEW: a transport or server-side failure occurred.")
+        sys.exit(1)
+    print("PASS: both endpoints returned an HTTP response.")
+    PY
+
+# Manual integration probe: authenticates, saves one raw response in an isolated
+# folder, downloads it again and checks its SHA-256. No production partition changes.
+bronze_auth_upload_probe:
+  stage: test
+  image: python:3.12-slim
+  timeout: 5 minutes
+  allow_failure: true
+  resource_group: bronze-ingestion
+  variables:
+    PYTHONPATH: "$CI_PROJECT_DIR/src"
+  rules:
+  - if: '$CI_COMMIT_BRANCH == "12-bronze-orchestration" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE != "schedule"'
+    when: manual
+  - when: never
+  script:
+  - python -m pip install --disable-pip-version-check requests python-dotenv tzdata
+  - |
+    python -u - <<'PY'
+    import hashlib
+    import json
+    import os
+    import sys
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    import requests
+    from rte_consumption_ml.bronze_backfill import valid_day
+
+    required = ("DATABRICKS_HOST", "DATABRICKS_TOKEN",
+                "RTE_CLIENT_ID", "RTE_CLIENT_SECRET")
+    missing = [key for key in required if not os.environ.get(key)]
+    if missing:
+        print("FAIL: missing CI/CD variables: " + ", ".join(missing))
+        print("Check Protect variable, protected branch and environment scope.")
+        sys.exit(1)
+
+    host = os.environ["DATABRICKS_HOST"].strip().rstrip("/")
+    if host != "https://dbc-ef009879-5f31.cloud.databricks.com":
+        print("FAIL: DATABRICKS_HOST does not match this project's workspace.")
+        sys.exit(1)
+
+    root = "/Volumes/workspace/bronze/rte_raw/_orchestration/probes"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = root + "/rte_2026-08-31_" + stamp + "_" + uuid4().hex[:8] + ".json"
+    start = datetime.fromisoformat("2026-08-31T00:00:00+02:00")
+    end = datetime.fromisoformat("2026-09-01T00:00:00+02:00")
+    phase = "initialization"
+
+    try:
+        with requests.Session() as session:
+            phase = "RTE authentication"
+            response = session.post(
+                "https://digital.iservices.rte-france.com/token/oauth/",
+                auth=(os.environ["RTE_CLIENT_ID"], os.environ["RTE_CLIENT_SECRET"]),
+                data={"grant_type": "client_credentials"},
+                timeout=(10, 30), allow_redirects=False,
+            )
+            if response.status_code != 200:
+                print(f"FAIL {phase}: HTTP {response.status_code}")
+                sys.exit(1)
+            access_token = response.json()["access_token"]
+            print("PASS: RTE authentication.")
+
+            phase = "RTE historical day request"
+            response = session.get(
+                "https://digital.iservices.rte-france.com/open_api/"
+                "consolidated_consumption/v1/consolidated_power_consumption",
+                headers={"Authorization": "Bearer " + access_token},
+                params={"start_date": start.isoformat(), "end_date": end.isoformat()},
+                timeout=(10, 60), allow_redirects=False,
+            )
+            if response.status_code != 200:
+                print(f"FAIL {phase}: HTTP {response.status_code}")
+                sys.exit(1)
+            raw = response.content
+            print(f"PASS: RTE day request; received {len(raw)} bytes.")
+
+            headers = {"Authorization": "Bearer " + os.environ["DATABRICKS_TOKEN"]}
+            phase = "Databricks test directory"
+            response = session.put(
+                host + "/api/2.0/fs/directories" + root,
+                headers=headers, timeout=(10, 30), allow_redirects=False,
+            )
+            if response.status_code not in (200, 201, 204):
+                print(f"FAIL {phase}: HTTP {response.status_code}")
+                sys.exit(1)
+
+            phase = "Databricks raw probe upload"
+            response = session.put(
+                host + "/api/2.0/fs/files" + path,
+                params={"overwrite": "false"},
+                headers={**headers, "Content-Type": "application/octet-stream"},
+                data=raw, timeout=(10, 60), allow_redirects=False,
+            )
+            if response.status_code not in (200, 201, 204):
+                print(f"FAIL {phase}: HTTP {response.status_code}")
+                sys.exit(1)
+            print("PASS: Databricks authentication and isolated probe upload.")
+
+            phase = "Databricks read-back verification"
+            response = session.get(
+                host + "/api/2.0/fs/files" + path, headers=headers,
+                timeout=(10, 60), allow_redirects=False,
+            )
+            if response.status_code != 200:
+                print(f"FAIL {phase}: HTTP {response.status_code}")
+                sys.exit(1)
+            expected = hashlib.sha256(raw).digest()
+            if hashlib.sha256(response.content).digest() != expected:
+                print("FAIL: uploaded bytes differ from the original RTE response.")
+                sys.exit(1)
+            print("PASS: uploaded response verified by SHA-256.")
+
+            phase = "Historical day coverage"
+            count = valid_day(json.loads(raw), start, end)
+            print(f"PASS: historical day validated; {count} half-hour intervals.")
+            print("Probe saved:", path)
+            print("PASS: GitLab -> RTE -> Bronze upload and read-back verified.")
+            print("Daily scheduling is not enabled. Silver and Gold were not changed.")
+    except (requests.RequestException, ValueError, KeyError, TypeError, OSError) as error:
+        print(f"FAIL {phase}: {type(error).__name__}")
+        sys.exit(1)
+    PY
