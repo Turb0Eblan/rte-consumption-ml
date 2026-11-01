@@ -17,7 +17,7 @@ from sklearn.utils import all_estimators
 from xgboost import XGBRegressor
 
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.settings import EXPERIMENT_NAME
+from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, ON_DATABRICKS
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
 EXCLUDED = {
@@ -44,6 +44,40 @@ EXCLUDED = {
     "MultiTaskLassoCV",
 }
 
+FEATURES = ["half_hour", "day_of_week", "month", "day_of_year",
+            "is_holiday", "lag_364d", "rolling_mean_7d_364"]
+
+#================================================================================================
+
+def load_gold(verbose=False):
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")   # same as storage.py
+
+    df = (
+        spark.table("workspace.gold.features")
+        .where("consumption_mw IS NOT NULL AND lag_364d IS NOT NULL AND rolling_mean_7d_364 IS NOT NULL")  # contract: training rows
+        .orderBy("ts")
+        .toPandas()
+    )
+
+    if verbose:
+        print('gold')
+        print(df)
+        print("=" * 100)
+
+    return df
+
+#================================================================================================
+
+def load_data(verbose=False):
+
+    if ON_DATABRICKS:
+        return load_gold(verbose)
+    
+    return make_fake_data(verbose) 
+
 #================================================================================================
 
 # same calendar for whole project
@@ -62,7 +96,7 @@ def add_calendar(df):
 
 #================================================================================================
 
-def load_data(verbose: bool = False) -> pd.DataFrame:
+def make_fake_data(verbose: bool = False) -> pd.DataFrame:
     # temporary gold table for test
     rng = np.random.default_rng(42)
 
@@ -153,8 +187,8 @@ def split_by_time(df, test_days=30, verbose=False):
         print("=" * 100)
 
 
-    X_train = train.drop(columns=["ts", "consumption_mw"])
-    X_test = test.drop(columns=["ts", "consumption_mw"])
+    X_train = train[FEATURES]
+    X_test = test[FEATURES]
 
     y_train = train["consumption_mw"]
     y_test = test["consumption_mw"]

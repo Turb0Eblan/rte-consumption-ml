@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, MODELS_DIR
 from rte_consumption_ml.ml.storage import append_rows
-from rte_consumption_ml.ml.train_search import get_estimators, load_data
+from rte_consumption_ml.ml.train_search import FEATURES, get_estimators, load_data
 
 
 def get_best_run(experiment_name=EXPERIMENT_NAME, verbose=False):
@@ -98,7 +98,7 @@ def main():
     name = best["params.estimator"]
 
     data = load_data()
-    X = data.drop(columns=["ts", "consumption_mw"])
+    X = data[FEATURES]
     y = data["consumption_mw"]
 
     model = build_model(name)
