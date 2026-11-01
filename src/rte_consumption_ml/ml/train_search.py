@@ -1,21 +1,21 @@
+import time
+from datetime import date, datetime
+
 import holidays
+import mlflow
 import numpy as np
 import pandas as pd
-import mlflow
-import time
-
-from sklearn.utils import all_estimators
+from lightgbm import LGBMRegressor
 from sklearn.metrics import (
     mean_absolute_error,
     mean_absolute_percentage_error,
     root_mean_squared_error,
 )
-
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-from datetime import date, datetime
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils import all_estimators
+from xgboost import XGBRegressor
+
 from rte_consumption_ml.ml.banner import LOGO
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
@@ -55,7 +55,7 @@ def add_calendar(df):
     df["day_of_year"] = df["ts"].dt.day_of_year
 
     fr_holidays = holidays.France(years=range(2020, 2028))
-    df['is_holiday'] = df["ts"].dt.date.isin(list((fr_holidays.keys())))
+    df['is_holiday'] = df["ts"].dt.date.isin(list(fr_holidays.keys()))
 
     return df
 
@@ -238,7 +238,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                     print("=" * 100)
 
                     
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - any model may fail, search must continue
                 mlflow.set_tag("status", "failed")
                 print('failed:', name, e)
                 print("=" * 100)
