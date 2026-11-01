@@ -45,6 +45,22 @@ EXCLUDED = {
 
 #================================================================================================
 
+# same calendar for whole project
+
+def add_calendar(df):
+
+    df["half_hour"] = df["ts"].dt.hour * 2 + df["ts"].dt.minute // 30
+    df["day_of_week"] = df["ts"].dt.day_of_week
+    df["month"] = df["ts"].dt.month
+    df["day_of_year"] = df["ts"].dt.day_of_year
+
+    fr_holidays = holidays.France(years=range(2020, 2028))
+    df['is_holiday'] = df["ts"].dt.date.isin(list((fr_holidays.keys())))
+
+    return df
+
+#================================================================================================
+
 def load_data(verbose: bool = False) -> pd.DataFrame:
     # temporary gold table for test
     rng = np.random.default_rng(42)
@@ -58,20 +74,11 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
         print("=" * 100)
 
     #=======================================
-    
-    # calendar example (for future table)
 
-    df["half_hour"] = df["ts"].dt.hour * 2 + df["ts"].dt.minute // 30
-    df["day_of_week"] = df["ts"].dt.day_of_week
-    df["month"] = df["ts"].dt.month
-    df["day_of_year"] = df["ts"].dt.day_of_year
-
-    fr_holidays = holidays.France(years=range(2020, 2027))
-
-    df['is_holiday'] = df["ts"].dt.date.isin(list((fr_holidays.keys())))
+    df = add_calendar(df)
 
     if verbose:
-        print('calendar example')
+        print('calendar')
         print(df)
         print("=" * 100)
 
