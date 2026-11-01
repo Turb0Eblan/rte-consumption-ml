@@ -1,5 +1,5 @@
 import time
-from datetime import date, datetime
+from datetime import datetime
 
 import holidays
 import mlflow
@@ -17,7 +17,7 @@ from sklearn.utils import all_estimators
 from xgboost import XGBRegressor
 
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, ON_DATABRICKS
+from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, ON_DATABRICKS, paris_today
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
 EXCLUDED = {
@@ -242,7 +242,7 @@ def evaluate(y_true, y_pred):
 def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
 
     mlflow.set_experiment(EXPERIMENT_NAME)
-    today = date.today().isoformat()
+    today = paris_today().isoformat()
     search_id = datetime.now().isoformat(timespec="seconds")
 
 
@@ -300,7 +300,7 @@ def main():
     print("=" * 100)
 
     print(LOGO)
-    print(f"RTE model search | {date.today()} | {len(estimators)} estimators")
+    print(f"RTE model search | {paris_today()} | {len(estimators)} estimators")
 
     run_search(estimators, X_train, X_test, y_train, y_test, verbose=print_setting)
 

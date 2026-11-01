@@ -1,5 +1,4 @@
 import os
-from datetime import date, datetime
 
 import joblib
 import mlflow
@@ -8,14 +7,19 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, MODELS_DIR
+from rte_consumption_ml.ml.settings import (
+    EXPERIMENT_NAME,
+    MODELS_DIR,
+    paris_now,
+    paris_today,
+)
 from rte_consumption_ml.ml.storage import append_rows
 from rte_consumption_ml.ml.train_search import FEATURES, get_estimators, load_data
 
 
 def get_best_run(experiment_name=EXPERIMENT_NAME, verbose=False):
 
-    today = date.today().isoformat()
+    today = paris_today().isoformat()
 
     runs = mlflow.search_runs(
         experiment_names=[experiment_name],
@@ -69,11 +73,11 @@ def save_model(model, path="models/best_model.joblib"):
 def log_best(best, path="models/best_models.csv"):
 
     row = pd.DataFrame([{
-        "date": date.today(),
+        "date": paris_today(),
         "estimator": best["params.estimator"],
         "mape": best["metrics.mape"],
         "run_id": best["run_id"],
-        "logged_at": datetime.now(),
+        "logged_at": paris_now(),
     }])
 
     append_rows(row, "workspace.gold.best_models", path)

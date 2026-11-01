@@ -16,6 +16,12 @@ EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT", DEFAULT_EXPERIMENT)
 
 PARIS = ZoneInfo("Europe/Paris")
 
+
 def paris_today():
     # Databricks runs in UTC, but our days (Gold, dashboard) are Paris days
     return datetime.now(PARIS).date()
+
+
+def paris_now():
+    # naive Paris time, because storage.py writes with session timezone Europe/Paris
+    return datetime.now(PARIS).replace(tzinfo=None)
