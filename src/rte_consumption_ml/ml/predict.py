@@ -6,6 +6,7 @@ import pandas as pd
 
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.settings import MODELS_DIR
+from rte_consumption_ml.ml.storage import append_rows, read_rows
 from rte_consumption_ml.ml.train_search import add_calendar, load_data
 
 
@@ -17,7 +18,9 @@ def load_model(path=f"{MODELS_DIR}/best_model.joblib"):
 
 def load_best_name(path=f"{MODELS_DIR}/best_models.csv"):
 
-    log = pd.read_csv(path)
+    log = read_rows("workspace.gold.best_models", path)
+
+    log = log.sort_values("logged_at")
 
     return log["estimator"].iloc[-1]
 
@@ -57,7 +60,8 @@ def save_predictions(ts, y_pred, estimator, path=f"{MODELS_DIR}/predictions.csv"
         "estimator": estimator,
         "predicted_on": date.today().isoformat(),
     })
-    rows.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+    append_rows(rows, "workspace.gold.predictions", path)
 
     print("Saved", len(rows), "predictions to", path)
 

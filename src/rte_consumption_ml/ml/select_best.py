@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, datetime
 
 import joblib
 import mlflow
@@ -9,6 +9,7 @@ from sklearn.preprocessing import StandardScaler
 
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, MODELS_DIR
+from rte_consumption_ml.ml.storage import append_rows
 from rte_consumption_ml.ml.train_search import get_estimators, load_data
 
 
@@ -71,9 +72,11 @@ def log_best(best, path="models/best_models.csv"):
         "date": date.today().isoformat(),
         "estimator": best["params.estimator"],
         "mape": best["metrics.mape"],
-        "run_id": best["run_id"]
+        "run_id": best["run_id"],
+        "logged_at": datetime.now().isoformat(timespec="seconds"),
     }])
-    row.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+    append_rows(row, "workspace.gold.best_models", path)
 
     print("Logged best model to", path)
 
