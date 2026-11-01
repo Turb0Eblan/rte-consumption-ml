@@ -102,7 +102,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     df["lag_364d"] = df["consumption_mw"].shift(364 * SLOTS_PER_DAY)
 
     df["rolling_mean_7d_364"] = df.groupby("half_hour")["consumption_mw"].transform(
-        lambda s: s.shift(364).rolling(7).mean()
+        lambda s: s.shift(364).rolling(7, min_periods=5).mean()
     )
 
     if verbose:
