@@ -17,3 +17,79 @@ variables:
   SECRET_DETECTION_ENABLED: 'true'
 secret_detection:
   stage: secret-detection
+
+# SAST and secret detection remain enabled.
+stages:
+- test
+- secret-detection
+sast:
+  stage: test
+include:
+- template: Security/SAST.gitlab-ci.yml
+- template: Security/Secret-Detection.gitlab-ci.yml
+variables:
+  SECRET_DETECTION_ENABLED: 'true'
+secret_detection:
+  stage: secret-detection
+
+# Manual diagnostic only. HTTP reachability does not verify authentication.
+# No credentials, response bodies or headers are printed.
+bronze_network_probe:
+  stage: test
+  image: python:3.12-slim
+  timeout: 5 minutes
+  allow_failure: true
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    when: never
+  - when: manual
+  script:
+  - |
+    python -u - <<'PY'
+    import sys
+    import urllib.error
+    import urllib.request
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect())
+    targets = [
+        (
+            "RTE API",
+            "https://digital.iservices.rte-france.com/open_api/"
+            "consolidated_consumption/v1/consolidated_power_consumption",
+        ),
+        (
+            "Databricks Files API",
+            "https://dbc-ef009879-5f31.cloud.databricks.com/"
+            "api/2.0/fs/directories/Volumes/workspace/bronze/rte_raw",
+        ),
+    ]
+    failed = False
+    for label, url in targets:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "rte-consumption-ml-network-probe"}
+        )
+        try:
+            with opener.open(request, timeout=20) as response:
+                status = response.status
+        except urllib.error.HTTPError as error:
+            status = error.code
+            error.close()
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            reason = getattr(error, "reason", error)
+            print(f"FAIL {label}: {type(reason).__name__}", flush=True)
+            failed = True
+            continue
+        print(f"REACHED {label}: HTTP {status}", flush=True)
+        if not 200 <= status < 500:
+            failed = True
+    print("No credentials were used. HTTP 401/403 may be expected for this probe.")
+    print("Authentication, API authorization and volume writes are NOT verified.")
+    if failed:
+        print("REVIEW: a transport or server-side failure occurred.")
+        sys.exit(1)
+    print("PASS: both endpoints returned an HTTP response.")
+    PY
