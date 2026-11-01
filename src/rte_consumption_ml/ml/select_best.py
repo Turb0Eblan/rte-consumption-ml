@@ -8,11 +8,11 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.settings import MODELS_DIR
+from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, MODELS_DIR
 from rte_consumption_ml.ml.train_search import get_estimators, load_data
 
 
-def get_best_run(experiment_name="rte-model-search", verbose=False):
+def get_best_run(experiment_name=EXPERIMENT_NAME, verbose=False):
 
     today = date.today().isoformat()
 
