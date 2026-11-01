@@ -34,7 +34,8 @@ def make_d1_features(verbose=False):
     df["lag_364d"] = (df["ts"] - pd.Timedelta(days=364)).map(history)
 
     past_days = [(df["ts"] - pd.Timedelta(days=d)).map(history) for d in range(364, 371)]
-    df["rolling_mean_7d_364"] = pd.concat(past_days, axis=1).mean(axis=1)
+    past = pd.concat(past_days, axis=1)
+    df["rolling_mean_7d_364"] = past.mean(axis=1).where(past.count(axis=1) >= 5)
 
     if verbose:
         print('d1 features')
@@ -80,6 +81,10 @@ def main():
 
     d1 = make_d1_features(verbose=print_setting)
     X = d1.drop(columns=["ts"])
+
+    if X.isna().any().any():
+        raise ValueError("D+1 features have missing values, cannot predict")
+
     y_pred = model.predict(X)
 
     if print_setting:
