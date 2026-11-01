@@ -1,9 +1,13 @@
+import os
+from datetime import date
+
 import joblib
 import pandas as pd
 
-from datetime import date
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.train_search import add_calendar, load_data
+
+print_setting = False # True for debugging  
 
 def load_model(path="models/best_model.joblib"):
 
@@ -42,9 +46,23 @@ def make_d1_features(verbose=False):
 
 #================================================================================================
 
-def main():
+def save_predictions(ts, y_pred, estimator, path="models/predictions.csv"):
 
-    print_setting = False # True for debugging
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    rows = pd.DataFrame({
+        "ts": ts,
+        "prediction_mw": y_pred,
+        "estimator": estimator,
+        "predicted_on": date.today().isoformat(),
+    })
+    rows.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+    print("Saved", len(rows), "predictions to", path)
+
+#================================================================================================
+
+def main():
 
     print(LOGO)
     print("=" * 100)
@@ -60,7 +78,15 @@ def main():
     print("Loaded:", name)
 
     d1 = make_d1_features(verbose=print_setting)
-    print(d1)
+    X = d1.drop(columns=["ts"])
+    y_pred = model.predict(X)
+
+    if print_setting:
+        print('d1')
+        print(d1)
+        print("=" * 100)
+
+    save_predictions(d1["ts"], y_pred, name)
 
 
 if __name__ == "__main__":
