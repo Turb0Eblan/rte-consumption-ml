@@ -90,3 +90,13 @@ Review days are not silently repaired.
 The three-month revision window does not cover annual finalization of older
 years; plan separate historical re-fetches when required.
 Refreshing Bronze does not automatically rebuild Silver or Gold.
+
+## Integration validation — 2026-11-01
+
+- Local and GitLab CI self-tests passed.
+- Dry run discovered the published exclusive end: 2026-09-01.
+- Refresh covered 2026-06-01 inclusive to 2026-09-01 exclusive.
+- First run: 92 new responses uploaded and verified; no days required review.
+- Repeat run: 0 new responses and 92 unchanged responses; no days required review.
+- Silver and Gold were not modified.
+- Automatic daily scheduling remains disabled pending review and merge.
