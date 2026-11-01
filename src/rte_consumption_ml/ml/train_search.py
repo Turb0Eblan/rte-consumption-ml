@@ -75,8 +75,8 @@ def load_data(verbose=False):
 
     if ON_DATABRICKS:
         return load_gold(verbose)
-    
-    return make_fake_data(verbose) 
+
+    return make_fake_data(verbose)
 
 #================================================================================================
 
@@ -229,8 +229,8 @@ def evaluate(y_true, y_pred):
 
 
     metrics = {
-        "mae": mean_absolute_error(y_true, y_pred), 
-        "rmse": root_mean_squared_error(y_true, y_pred), 
+        "mae": mean_absolute_error(y_true, y_pred),
+        "rmse": root_mean_squared_error(y_true, y_pred),
         "mape": mean_absolute_percentage_error(y_true, y_pred)
     }
 
@@ -263,7 +263,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                 metrics = evaluate(y_test, y_pred)
                 metrics["fit_seconds"] = fit_seconds
                 mlflow.log_metrics(metrics)
-                
+
 
 
                 if verbose:
@@ -272,7 +272,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                     print('metrics', metrics)
                     print("=" * 100)
 
-                    
+
             except Exception as e:  # noqa: BLE001 - any model may fail, search must continue
                 mlflow.set_tag("status", "failed")
                 print('failed:', name, e)

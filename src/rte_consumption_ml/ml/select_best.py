@@ -68,7 +68,7 @@ def save_model(model, path="models/best_model.joblib"):
 
 def log_best(best, path="models/best_models.csv"):
 
-    row = pd.DataFrame([{ 
+    row = pd.DataFrame([{
         "date": date.today(),
         "estimator": best["params.estimator"],
         "mape": best["metrics.mape"],
@@ -82,15 +82,15 @@ def log_best(best, path="models/best_models.csv"):
 
 def main():
 
-    print_setting = False # True for debugging  
+    print_setting = False # True for debugging
 
     best = get_best_run(verbose=print_setting)
-    
+
     print(LOGO)
     print("=" * 100)
     print(
-        'Best name:', best["params.estimator"], 
-        'Best metric:', best["metrics.mape"], 
+        'Best name:', best["params.estimator"],
+        'Best metric:', best["metrics.mape"],
         "Best id:", best["run_id"]
     )
     print("=" * 100)
@@ -107,7 +107,7 @@ def main():
         print('model')
         print(model)
         print("=" * 100)
-    
+
     model.fit(X, y)
     print("Trained:", name, "on", len(X), "rows")
 

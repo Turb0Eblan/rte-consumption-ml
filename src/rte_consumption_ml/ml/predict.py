@@ -5,10 +5,49 @@ import joblib
 import pandas as pd
 
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.settings import MODELS_DIR
+from rte_consumption_ml.ml.settings import MODELS_DIR, ON_DATABRICKS
 from rte_consumption_ml.ml.storage import append_rows, read_rows
-from rte_consumption_ml.ml.train_search import add_calendar, load_data
+from rte_consumption_ml.ml.train_search import (
+    FEATURES,
+    add_calendar,
+    load_data,
+)
 
+#================================================================================================
+
+def load_d1_gold(verbose=False):
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
+
+    d1 = (
+        spark.table("workspace.gold.features")
+        .where("consumption_mw IS NULL")                 # contract: serving rows
+        .orderBy("ts")
+        .toPandas()
+    )
+
+    # gold keeps only one forecast day; if gold was not rebuilt today,
+    # these rows are for an old day and we must not predict them
+    tomorrow = (pd.Timestamp(date.today()) + pd.Timedelta(days=1)).date()
+    days = d1["ts"].dt.date.unique()
+    if list(days) != [tomorrow]:
+        raise ValueError(f"Gold D+1 rows are for {days}, expected {tomorrow}")
+
+    if verbose:
+        print('gold')
+        print(d1)
+        print("=" * 100)
+
+    return d1
+
+#================================================================================================
+
+def get_d1_features(verbose=False):
+    if ON_DATABRICKS:
+        return load_d1_gold(verbose)
+    return make_d1_features(verbose)
 
 def load_model(path=f"{MODELS_DIR}/best_model.joblib"):
 
@@ -82,8 +121,8 @@ def main():
 
     print("Loaded:", name)
 
-    d1 = make_d1_features(verbose=print_setting)
-    X = d1.drop(columns=["ts"])
+    d1 = get_d1_features(verbose=print_setting)
+    X = d1[FEATURES]
 
     if X.isna().any().any():
         raise ValueError("D+1 features have missing values, cannot predict")
