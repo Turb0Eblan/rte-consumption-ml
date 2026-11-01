@@ -7,7 +7,6 @@ import pandas as pd
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.train_search import add_calendar, load_data
 
-print_setting = False # True for debugging  
 
 def load_model(path="models/best_model.joblib"):
 
@@ -63,6 +62,8 @@ def save_predictions(ts, y_pred, estimator, path="models/predictions.csv"):
 #================================================================================================
 
 def main():
+
+    print_setting = False # True for debugging
 
     print(LOGO)
     print("=" * 100)
