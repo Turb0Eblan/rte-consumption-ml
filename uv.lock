@@ -1174,6 +1174,7 @@ name = "rte-consumption-ml"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "databricks-sdk" },
     { name = "holidays" },
     { name = "lightgbm" },
     { name = "mlflow" },
@@ -1182,11 +1183,13 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "scikit-learn" },
+    { name = "tzdata" },
     { name = "xgboost" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "databricks-sdk", specifier = ">=0.158.0" },
     { name = "holidays", specifier = ">=0.107" },
     { name = "lightgbm", specifier = ">=4.7.0" },
     { name = "mlflow", specifier = ">=3.17.2" },
@@ -1195,6 +1198,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
+    { name = "tzdata", specifier = ">=2026.6" },
     { name = "xgboost", specifier = ">=3.4.1" },
 ]
 
