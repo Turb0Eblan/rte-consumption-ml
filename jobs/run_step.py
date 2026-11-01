@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 
 # the job runs this file directly, so make src/ importable
+# Databricks runs this file with exec(), where __file__ is not defined,
+# but sys.argv[0] still holds the script path
 ROOT = Path(sys.argv[0]).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
