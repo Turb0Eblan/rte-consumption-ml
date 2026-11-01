@@ -5,7 +5,7 @@ import joblib
 import pandas as pd
 
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.settings import MODELS_DIR, ON_DATABRICKS
+from rte_consumption_ml.ml.settings import MODELS_DIR, ON_DATABRICKS, paris_today
 from rte_consumption_ml.ml.storage import append_rows, read_rows
 from rte_consumption_ml.ml.train_search import (
     FEATURES,
@@ -30,7 +30,7 @@ def load_d1_gold(verbose=False):
 
     # gold keeps only one forecast day; if gold was not rebuilt today,
     # these rows are for an old day and we must not predict them
-    tomorrow = (pd.Timestamp(date.today()) + pd.Timedelta(days=1)).date()
+    tomorrow = (paris_today() + pd.Timedelta(days=1))
     days = d1["ts"].dt.date.unique()
     if list(days) != [tomorrow]:
         raise ValueError(f"Gold D+1 rows are for {days}, expected {tomorrow}")
