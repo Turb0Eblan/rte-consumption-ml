@@ -8,6 +8,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from rte_consumption_ml.ml.banner import LOGO
+from rte_consumption_ml.ml.settings import MODELS_DIR
 from rte_consumption_ml.ml.train_search import get_estimators, load_data
 
 
@@ -109,9 +110,9 @@ def main():
     model.fit(X, y)
     print("Trained:", name, "on", len(X), "rows")
 
-    save_model(model)
+    save_model(model, path=f"{MODELS_DIR}/best_model.joblib")
 
-    log_best(best)
+    log_best(best, path=f"{MODELS_DIR}/best_models.csv")
 
 
 if __name__ == "__main__":
