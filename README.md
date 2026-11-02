@@ -99,14 +99,20 @@ decide which mode to use.
 
 ## Databricks job
 
-Job name: `rte-ml-daily`. It runs `jobs/run_step.py` three times, each task
-depends on the previous one:
+Job name: `rte-ml-daily`. It runs every day at 06:00 Europe/Paris and has four
+tasks, each one waits for the previous one:
 
-| Task | Parameter |
-|---|---|
-| search | `["search"]` |
-| select | `["select"]` |
-| predict | `["predict"]` |
+| Task | Script | Parameter |
+|---|---|---|
+| gold | `src/rte_consumption_ml/gold_features.py` | none |
+| search | `jobs/run_step.py` | `["search"]` |
+| select | `jobs/run_step.py` | `["select"]` |
+| predict | `jobs/run_step.py` | `["predict"]` |
+
+The gold task rebuilds `workspace.gold.features` with today's date, which
+creates the empty rows for tomorrow. Then the ML part trains and predicts.
+If one task fails, the next ones do not run, so we never write a forecast made
+with old data.
 
 Settings we used:
 
@@ -116,10 +122,15 @@ Settings we used:
   `xgboost-cpu`, `lightgbm`, `holidays`. We did not use the pyproject.toml
   option because it would replace the pandas and MLflow versions that come
   with Databricks.
-- A full run takes about 11 minutes, most of it is the model search.
+- A full run takes about 12 minutes, most of it is the model search.
 
-The Gold table has to be rebuilt each morning before this job, because that
-is what creates tomorrow's rows.
+The first scheduled run was on 2026-11-02 at 06:00.
+
+About dates: Databricks machines use UTC, but our days are Paris days. Between
+midnight and 1 am (2 am in summer) the two calendars disagree, and our first
+night run failed because `predict` expected the wrong "tomorrow". So all dates
+and times we write come from `paris_today()` and `paris_now()` in
+`ml/settings.py`.
 
 ## Dashboard
 
@@ -161,6 +172,11 @@ uv run python -m rte_consumption_ml.gold_features --self-test
 
 First run on real data (2026-11-01): the best model was
 OrthogonalMatchingPursuit with MAPE 3.14%.
+
+The MAPE stays the same from day to day for now. The model is retrained every
+morning, but the history in Silver still ends on 2026-08-31, so it sees the
+same data and picks the same model. The line on the dashboard will only move
+once newer consolidated data reaches Silver.
 
 Keep in mind that the test period is August 2026, when consumption is low and
 stable. We expect a higher error in November with heating. We also have no
