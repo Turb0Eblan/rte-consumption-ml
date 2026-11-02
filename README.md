@@ -142,6 +142,10 @@ and times we write come from `paris_today()` and `paris_now()` in
 It has a table with the best estimator per day, a line chart of its MAPE, and
 the D+1 forecast curve.
 
+The exported definition is in `dashboards/rte_consumption_forecast.lvdash.json`.
+It can be imported in another workspace with Dashboards -> Create -> Import
+dashboard from file.
+
 ## Running locally
 
 You need Python 3.12 and [uv](https://docs.astral.sh/uv/).
