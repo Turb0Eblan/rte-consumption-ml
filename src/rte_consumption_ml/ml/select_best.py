@@ -3,8 +3,6 @@ import os
 import joblib
 import mlflow
 import pandas as pd
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.settings import (
@@ -14,7 +12,12 @@ from rte_consumption_ml.ml.settings import (
     paris_today,
 )
 from rte_consumption_ml.ml.storage import append_rows
-from rte_consumption_ml.ml.train_search import FEATURES, get_estimators, load_data
+from rte_consumption_ml.ml.train_search import (
+    FEATURES,
+    get_estimators,
+    load_data,
+    make_model,
+)
 
 
 def get_best_run(experiment_name=EXPERIMENT_NAME, verbose=False):
@@ -56,7 +59,7 @@ def build_model(estimator_name):
     estimators = dict(get_estimators())
     cls = estimators[estimator_name]
 
-    return make_pipeline(StandardScaler(), cls())
+    return make_model(cls)
 
 #================================================================================================
 

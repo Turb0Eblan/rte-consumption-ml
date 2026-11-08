@@ -253,7 +253,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                 mlflow.log_param("estimator", name)
                 mlflow.set_tag("search_date", today)
                 mlflow.set_tag("search_id", search_id)
-                model = make_pipeline(StandardScaler(), cls())
+                model = make_model(cls)
 
                 start = time.perf_counter()
                 model.fit(X_train, y_train)
@@ -277,6 +277,14 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                 mlflow.set_tag("status", "failed")
                 print('failed:', name, e)
                 print("=" * 100)
+
+#================================================================================================
+
+def make_model(cls):
+    params = cls().get_params()
+    if "random_state" in params:
+        return make_pipeline(StandardScaler(), cls(random_state=42))
+    return make_pipeline(StandardScaler(), cls())
 
 #================================================================================================
 
