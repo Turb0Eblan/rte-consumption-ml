@@ -182,6 +182,15 @@ morning, but the history in Silver still ends on 2026-08-31, so it sees the
 same data and picks the same model. The line on the dashboard will only move
 once newer consolidated data reaches Silver.
 
+On 2026-11-08 RANSACRegressor won with 2.97% although the data had not
+changed. RANSAC is random, and we did not fix its seed, so it just got lucky
+that day. Worse, the select step retrained it with another seed, so the model
+in production was not the one that scored 2.97%. We now set
+`random_state=42` for every estimator that has it (`make_model` in
+`train_search.py`). Two searches on the same data now give exactly the same
+MAPE for all models, and on 2026-11-09 OrthogonalMatchingPursuit was back on
+top with 3.14%.
+
 Keep in mind that the test period is August 2026, when consumption is low and
 stable. We expect a higher error in November with heating. We also have no
 weather data, which is the main thing that would improve the forecast.
