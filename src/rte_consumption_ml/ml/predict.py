@@ -4,6 +4,7 @@ from datetime import date
 import joblib
 import pandas as pd
 
+from rte_consumption_ml.ml.settings import MODELS_DIR
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.train_search import add_calendar, load_data
 
@@ -69,8 +70,8 @@ def main():
     print(LOGO)
     print("=" * 100)
 
-    model = load_model()
-    name = load_best_name()
+    model = load_model(path=os.path.join(MODELS_DIR, "best_model.joblib"))
+    name = load_best_name(path=os.path.join(MODELS_DIR, "best_models.csv"))
 
     if print_setting:
         print('model')
