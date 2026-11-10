@@ -64,6 +64,7 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     df["half_hour"] = df["ts"].dt.hour * 2 + df["ts"].dt.minute // 30
     df["day_of_week"] = df["ts"].dt.day_of_week
     df["month"] = df["ts"].dt.month
+    df["day_of_year"] = df["ts"].dt.day_of_year
 
     fr_holidays = holidays.France(years=range(2020, 2027))
 
@@ -78,10 +79,9 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
 
     # fake target: base + seasons + daily cycle + weekend/holiday dip + noise
 
-    day_of_year = df["ts"].dt.day_of_year
     df["consumption_mw"] = (
         50_000
-        + 12_000 * np.cos(2 * np.pi * day_of_year / 365.25)  # winter high, summer low
+        + 12_000 * np.cos(2 * np.pi * df["day_of_year"] / 365.25)  # winter high, summer low
         + 6_000 * np.sin(2 * np.pi * (df["half_hour"] - 14) / SLOTS_PER_DAY)  # day vs night
         - 5_000 * (df["day_of_week"] >= 5)  # weekend
         - 4_000 * df["is_holiday"]
@@ -96,12 +96,13 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
     #========================================
 
     # lag example (for future table)
+    # fake data has no DST (always 48 slots), so shift is ok here
+    # real gold joins on (local_date - 364, half_hour)
 
-    df["lag_d1"] = df["consumption_mw"].shift(SLOTS_PER_DAY)
-    df["lag_d7"] = df["consumption_mw"].shift(7 * SLOTS_PER_DAY)
+    df["lag_364d"] = df["consumption_mw"].shift(364 * SLOTS_PER_DAY)
 
-    df["rolling_mean_7d"] = df.groupby("half_hour")["consumption_mw"].transform(
-        lambda s: s.shift(1).rolling(7).mean()
+    df["rolling_mean_7d_364"] = df.groupby("half_hour")["consumption_mw"].transform(
+        lambda s: s.shift(364).rolling(7, min_periods=5).mean()
     )
 
     if verbose:
