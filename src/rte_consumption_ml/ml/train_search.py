@@ -1,21 +1,21 @@
+import time
+from datetime import date, datetime
+
 import holidays
+import mlflow
 import numpy as np
 import pandas as pd
-import mlflow
-import time
-
-from sklearn.utils import all_estimators
+from lightgbm import LGBMRegressor
 from sklearn.metrics import (
     mean_absolute_error,
     mean_absolute_percentage_error,
     root_mean_squared_error,
 )
-
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-from datetime import date, datetime
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils import all_estimators
+from xgboost import XGBRegressor
+
 from rte_consumption_ml.ml.banner import LOGO
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
@@ -45,6 +45,22 @@ EXCLUDED = {
 
 #================================================================================================
 
+# same calendar for whole project
+
+def add_calendar(df):
+
+    df["half_hour"] = df["ts"].dt.hour * 2 + df["ts"].dt.minute // 30
+    df["day_of_week"] = df["ts"].dt.day_of_week
+    df["month"] = df["ts"].dt.month
+    df["day_of_year"] = df["ts"].dt.day_of_year
+
+    fr_holidays = holidays.France(years=range(2020, 2028))
+    df['is_holiday'] = df["ts"].dt.date.isin(list(fr_holidays.keys()))
+
+    return df
+
+#================================================================================================
+
 def load_data(verbose: bool = False) -> pd.DataFrame:
     # temporary gold table for test
     rng = np.random.default_rng(42)
@@ -58,20 +74,11 @@ def load_data(verbose: bool = False) -> pd.DataFrame:
         print("=" * 100)
 
     #=======================================
-    
-    # calendar example (for future table)
 
-    df["half_hour"] = df["ts"].dt.hour * 2 + df["ts"].dt.minute // 30
-    df["day_of_week"] = df["ts"].dt.day_of_week
-    df["month"] = df["ts"].dt.month
-    df["day_of_year"] = df["ts"].dt.day_of_year
-
-    fr_holidays = holidays.France(years=range(2020, 2027))
-
-    df['is_holiday'] = df["ts"].dt.date.isin(list((fr_holidays.keys())))
+    df = add_calendar(df)
 
     if verbose:
-        print('calendar example')
+        print('calendar')
         print(df)
         print("=" * 100)
 
@@ -231,7 +238,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                     print("=" * 100)
 
                     
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - any model may fail, search must continue
                 mlflow.set_tag("status", "failed")
                 print('failed:', name, e)
                 print("=" * 100)
