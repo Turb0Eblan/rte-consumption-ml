@@ -3,9 +3,9 @@
 ENSE3 Machine Learning project, group 4 (Artur Nam, Fady Abuisaac).
 
 We forecast French electricity consumption for the next day (D+1) at 30 minute
-resolution, using RTE open data. Everything runs on Databricks Free Edition:
-a data pipeline builds the Bronze, Silver and Gold layers, a daily ML job picks
-the best model and makes the forecast, and a dashboard shows the results.
+resolution, using RTE open data. GitLab CI fetches the raw RTE data and uploads it to Databricks Free Edition.
+Databricks hosts the Bronze, Silver and Gold layers, the daily ML job,
+and the dashboard.
 
 ## How it works
 
@@ -16,7 +16,7 @@ Bronze   raw JSON files in a volume, one folder per day
   |
 Silver   cleaned 30 min consumption table, bad days go to quarantine
   |
-Gold     features for the model + 48 empty rows for tomorrow
+Gold     model features + D+1 rows with a null consumption target
   |
 ML job   search -> select -> predict
   |
@@ -37,8 +37,8 @@ The catalog is `workspace` with one schema per layer:
 The daily Bronze download (`bronze_daily.py`) runs from a GitLab CI job and
 not from Databricks, because Databricks serverless could not reach the RTE API
 (DNS errors). It uploads the files to the volume through the Databricks API.
-Each run downloads the last three months again, so revisions from RTE are
-picked up.
+Each run re-fetches the last three published months to pick up RTE revisions.
+Unchanged responses are not stored again.
 
 More details on the data side are in `docs/databricks_architecture.md`,
 `docs/bronze_daily.md`, `docs/silver_transform.md` and `docs/gold_features.md`.
@@ -69,7 +69,8 @@ there are 50 half hours, in spring 46. The six autumn DST days from 2020 to
 2025 had inconsistent data and are quarantined in Silver.
 
 Metric: MAPE is used to choose the best model, MAE and RMSE are logged too.
-The last 30 days of history are the test set, no shuffling.
+The last 30 days of history are held out for model selection, with no shuffling.
+The reported MAPE is a validation score.
 
 ## ML pipeline
 
@@ -85,7 +86,7 @@ Code is in `src/rte_consumption_ml/ml/`.
    MAPE, retrains that model on all the data and saves it with joblib to the
    models volume. It also appends a row to `workspace.gold.best_models`.
 3. `predict.py` loads the model, reads tomorrow's rows from Gold
-   (`consumption_mw IS NULL`) and writes 48 predictions to
+   (`consumption_mw IS NULL`) and writes the resulting forecasts to
    `workspace.gold.predictions`. If Gold still has the rows of another day it
    stops with an error instead of predicting the wrong date.
 
@@ -110,9 +111,10 @@ tasks, each one waits for the previous one:
 | predict | `jobs/run_step.py` | `["predict"]` |
 
 The gold task rebuilds `workspace.gold.features` with today's date, which
-creates the empty rows for tomorrow. Then the ML part trains and predicts.
-If one task fails, the next ones do not run, so we never write a forecast made
-with old data.
+creates tomorrow's rows with a null target: normally 48 half-hour intervals,
+or 46 or 50 on daylight saving transition days. Then the ML tasks train and
+predict. If a task fails, downstream tasks do not run. This job reads the
+existing Silver tables; it does not refresh Silver when Bronze changes.
 
 Settings we used:
 
@@ -177,10 +179,9 @@ uv run python -m rte_consumption_ml.gold_features --self-test
 First run on real data (2026-11-01): the best model was
 OrthogonalMatchingPursuit with MAPE 3.14%.
 
-The MAPE stays the same from day to day for now. The model is retrained every
-morning, but the history in Silver still ends on 2026-08-31, so it sees the
-same data and picks the same model. The line on the dashboard will only move
-once newer consolidated data reaches Silver.
+The model is retrained each morning. While the Silver history stays unchanged,
+a repeatable search with the same configuration is expected to return the
+same validation MAPE.
 
 On 2026-11-08 RANSACRegressor won with 2.97% although the data had not
 changed. RANSAC is random, and we did not fix its seed, so it just got lucky
@@ -191,7 +192,7 @@ in production was not the one that scored 2.97%. We now set
 MAPE for all models, and on 2026-11-09 OrthogonalMatchingPursuit was back on
 top with 3.14%.
 
-Keep in mind that the test period is August 2026, when consumption is low and
+Keep in mind that the validation period was August 2026, when consumption is low and
 stable. We expect a higher error in November with heating. We also have no
 weather data, which is the main thing that would improve the forecast.
 
