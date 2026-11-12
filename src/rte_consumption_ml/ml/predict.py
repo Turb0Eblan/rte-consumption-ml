@@ -6,7 +6,7 @@ import pandas as pd
 
 from rte_consumption_ml.ml.banner import LOGO
 from rte_consumption_ml.ml.settings import MODELS_DIR, ON_DATABRICKS, paris_today
-from rte_consumption_ml.ml.storage import append_rows, read_rows
+from rte_consumption_ml.ml.storage import read_rows, replace_day
 from rte_consumption_ml.ml.train_search import (
     FEATURES,
     add_calendar,
@@ -100,7 +100,7 @@ def save_predictions(ts, y_pred, estimator, path=f"{MODELS_DIR}/predictions.csv"
         "predicted_on": paris_today(),
     })
 
-    append_rows(rows, "workspace.gold.predictions", path)
+    replace_day(rows, "workspace.gold.predictions", path, "predicted_on", paris_today())
 
 #================================================================================================
 

@@ -5,6 +5,27 @@ import pandas as pd
 from rte_consumption_ml.ml.settings import ON_DATABRICKS
 
 
+def replace_day(df, table, csv_path, day_col, day):
+    if ON_DATABRICKS:
+        from pyspark.sql import SparkSession
+        spark = SparkSession.builder.getOrCreate()
+        spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
+        (spark.createDataFrame(df).write
+            .mode("overwrite")
+            .option("replaceWhere", f"{day_col} = '{day}'")
+            .saveAsTable(table))
+
+        print("Replaced", day, "in", table)
+    else:
+        old = pd.read_csv(csv_path) if os.path.exists(csv_path) else pd.DataFrame()
+        if not old.empty:
+            old = old[old[day_col] != day.isoformat()]   # drop this day's rows, then write them again
+        pd.concat([old, df]).to_csv(csv_path, index=False)
+
+        print("Replaced", day, "in", table)
+
+#================================================================================================
+
 def append_rows(df, table, csv_path):
     # Databricks: append to a Delta table (dashboards read tables)
     # local: append to a CSV file (no Spark here)
@@ -20,6 +41,7 @@ def append_rows(df, table, csv_path):
         df.to_csv(csv_path, mode="a", header=not os.path.exists(csv_path), index=False)
         print("Appended", len(df), "rows to", csv_path)
 
+#================================================================================================
 
 def read_rows(table, csv_path):
     if ON_DATABRICKS:
