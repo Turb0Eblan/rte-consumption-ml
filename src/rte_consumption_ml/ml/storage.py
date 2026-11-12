@@ -12,8 +12,15 @@ def replace_day(df, table, csv_path, day_col, day):
         spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
 
         if spark.catalog.tableExists(table):
-            spark.sql(f"DELETE FROM {table} WHERE {day_col} = '{day.isoformat()}'")
-        spark.createDataFrame(df).write.mode("append").saveAsTable(table)
+            cols = ", ".join(spark.table(table).columns)
+            spark.createDataFrame(df).createOrReplaceTempView("new_rows")
+            spark.sql(f"""
+            INSERT INTO {table}
+            REPLACE WHERE {day_col} = '{day.isoformat()}'
+            SELECT {cols} FROM new_rows
+            """)
+        else:
+            spark.createDataFrame(df).write.mode("append").saveAsTable(table)
 
         print("Replaced", day, "in", table)
 
