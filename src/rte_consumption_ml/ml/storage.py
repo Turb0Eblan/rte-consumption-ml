@@ -10,14 +10,16 @@ def replace_day(df, table, csv_path, day_col, day):
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
         spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
-        (spark.createDataFrame(df).write
-            .mode("overwrite")
-            .option("replaceWhere", f"{day_col} = '{day}'")
-            .saveAsTable(table))
+
+        if spark.catalog.tableExists(table):
+            spark.sql(f"DELETE FROM {table} WHERE {day_col} = '{day.isoformat()}'")
+        spark.createDataFrame(df).write.mode("append").saveAsTable(table)
 
         print("Replaced", day, "in", table)
+
     else:
         old = pd.read_csv(csv_path) if os.path.exists(csv_path) else pd.DataFrame()
+
         if not old.empty:
             old = old[old[day_col] != day.isoformat()]   # drop this day's rows, then write them again
         pd.concat([old, df]).to_csv(csv_path, index=False)
@@ -35,10 +37,13 @@ def append_rows(df, table, csv_path):
         spark = SparkSession.builder.getOrCreate()
         spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
         spark.createDataFrame(df).write.mode("append").saveAsTable(table)
+
         print("Appended", len(df), "rows to", table)
+
     else:
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         df.to_csv(csv_path, mode="a", header=not os.path.exists(csv_path), index=False)
+
         print("Appended", len(df), "rows to", csv_path)
 
 #================================================================================================
