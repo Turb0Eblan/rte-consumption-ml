@@ -1,5 +1,5 @@
 import time
-from datetime import date, datetime
+from datetime import datetime
 
 import holidays
 import mlflow
@@ -17,6 +17,7 @@ from sklearn.utils import all_estimators
 from xgboost import XGBRegressor
 
 from rte_consumption_ml.ml.banner import LOGO
+from rte_consumption_ml.ml.settings import EXPERIMENT_NAME, ON_DATABRICKS, paris_today
 
 SLOTS_PER_DAY = 48 # recording every 30 min, so 24h * 2
 EXCLUDED = {
@@ -43,6 +44,40 @@ EXCLUDED = {
     "MultiTaskLassoCV",
 }
 
+FEATURES = ["half_hour", "day_of_week", "month", "day_of_year",
+            "is_holiday", "lag_364d", "rolling_mean_7d_364"]
+
+#================================================================================================
+
+def load_gold(verbose=False):
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")   # same as storage.py
+
+    df = (
+        spark.table("workspace.gold.features")
+        .where("consumption_mw IS NOT NULL AND lag_364d IS NOT NULL AND rolling_mean_7d_364 IS NOT NULL")  # contract: training rows
+        .orderBy("ts")
+        .toPandas()
+    )
+
+    if verbose:
+        print('gold')
+        print(df)
+        print("=" * 100)
+
+    return df
+
+#================================================================================================
+
+def load_data(verbose=False):
+
+    if ON_DATABRICKS:
+        return load_gold(verbose)
+
+    return make_fake_data(verbose)
+
 #================================================================================================
 
 # same calendar for whole project
@@ -61,7 +96,7 @@ def add_calendar(df):
 
 #================================================================================================
 
-def load_data(verbose: bool = False) -> pd.DataFrame:
+def make_fake_data(verbose: bool = False) -> pd.DataFrame:
     # temporary gold table for test
     rng = np.random.default_rng(42)
 
@@ -152,8 +187,8 @@ def split_by_time(df, test_days=30, verbose=False):
         print("=" * 100)
 
 
-    X_train = train.drop(columns=["ts", "consumption_mw"])
-    X_test = test.drop(columns=["ts", "consumption_mw"])
+    X_train = train[FEATURES]
+    X_test = test[FEATURES]
 
     y_train = train["consumption_mw"]
     y_test = test["consumption_mw"]
@@ -194,8 +229,8 @@ def evaluate(y_true, y_pred):
 
 
     metrics = {
-        "mae": mean_absolute_error(y_true, y_pred), 
-        "rmse": root_mean_squared_error(y_true, y_pred), 
+        "mae": mean_absolute_error(y_true, y_pred),
+        "rmse": root_mean_squared_error(y_true, y_pred),
         "mape": mean_absolute_percentage_error(y_true, y_pred)
     }
 
@@ -206,8 +241,8 @@ def evaluate(y_true, y_pred):
 
 def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
 
-    mlflow.set_experiment("rte-model-search")
-    today = date.today().isoformat()
+    mlflow.set_experiment(EXPERIMENT_NAME)
+    today = paris_today().isoformat()
     search_id = datetime.now().isoformat(timespec="seconds")
 
 
@@ -218,7 +253,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                 mlflow.log_param("estimator", name)
                 mlflow.set_tag("search_date", today)
                 mlflow.set_tag("search_id", search_id)
-                model = make_pipeline(StandardScaler(), cls())
+                model = make_model(cls)
 
                 start = time.perf_counter()
                 model.fit(X_train, y_train)
@@ -228,7 +263,7 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                 metrics = evaluate(y_test, y_pred)
                 metrics["fit_seconds"] = fit_seconds
                 mlflow.log_metrics(metrics)
-                
+
 
 
                 if verbose:
@@ -237,11 +272,19 @@ def run_search(estimators, X_train, X_test, y_train, y_test, verbose=False):
                     print('metrics', metrics)
                     print("=" * 100)
 
-                    
+
             except Exception as e:  # noqa: BLE001 - any model may fail, search must continue
                 mlflow.set_tag("status", "failed")
                 print('failed:', name, e)
                 print("=" * 100)
+
+#================================================================================================
+
+def make_model(cls):
+    params = cls().get_params()
+    if "random_state" in params:
+        return make_pipeline(StandardScaler(), cls(random_state=42))
+    return make_pipeline(StandardScaler(), cls())
 
 #================================================================================================
 
@@ -265,7 +308,7 @@ def main():
     print("=" * 100)
 
     print(LOGO)
-    print(f"RTE model search | {date.today()} | {len(estimators)} estimators")
+    print(f"RTE model search | {paris_today()} | {len(estimators)} estimators")
 
     run_search(estimators, X_train, X_test, y_train, y_test, verbose=print_setting)
 

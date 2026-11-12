@@ -4,20 +4,62 @@ from datetime import date
 import joblib
 import pandas as pd
 
-from rte_consumption_ml.ml.settings import MODELS_DIR
 from rte_consumption_ml.ml.banner import LOGO
-from rte_consumption_ml.ml.train_search import add_calendar, load_data
+from rte_consumption_ml.ml.settings import MODELS_DIR, ON_DATABRICKS, paris_today
+from rte_consumption_ml.ml.storage import read_rows, replace_day
+from rte_consumption_ml.ml.train_search import (
+    FEATURES,
+    add_calendar,
+    load_data,
+)
 
+#================================================================================================
 
-def load_model(path="models/best_model.joblib"):
+def load_d1_gold(verbose=False):
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    spark.conf.set("spark.sql.session.timeZone", "Europe/Paris")
+
+    d1 = (
+        spark.table("workspace.gold.features")
+        .where("consumption_mw IS NULL")                 # contract: serving rows
+        .orderBy("ts")
+        .toPandas()
+    )
+
+    # gold keeps only one forecast day; if gold was not rebuilt today,
+    # these rows are for an old day and we must not predict them
+    tomorrow = (paris_today() + pd.Timedelta(days=1))
+    days = d1["ts"].dt.date.unique()
+    if list(days) != [tomorrow]:
+        raise ValueError(f"Gold D+1 rows are for {days}, expected {tomorrow}")
+
+    if verbose:
+        print('gold')
+        print(d1)
+        print("=" * 100)
+
+    return d1
+
+#================================================================================================
+
+def get_d1_features(verbose=False):
+    if ON_DATABRICKS:
+        return load_d1_gold(verbose)
+    return make_d1_features(verbose)
+
+def load_model(path=f"{MODELS_DIR}/best_model.joblib"):
 
     return joblib.load(path)
 
 #================================================================================================
 
-def load_best_name(path="models/best_models.csv"):
+def load_best_name(path=f"{MODELS_DIR}/best_models.csv"):
 
-    log = pd.read_csv(path)
+    log = read_rows("workspace.gold.best_models", path)
+
+    log = log.sort_values("logged_at")
 
     return log["estimator"].iloc[-1]
 
@@ -47,7 +89,7 @@ def make_d1_features(verbose=False):
 
 #================================================================================================
 
-def save_predictions(ts, y_pred, estimator, path="models/predictions.csv"):
+def save_predictions(ts, y_pred, estimator, path=f"{MODELS_DIR}/predictions.csv"):
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -55,11 +97,10 @@ def save_predictions(ts, y_pred, estimator, path="models/predictions.csv"):
         "ts": ts,
         "prediction_mw": y_pred,
         "estimator": estimator,
-        "predicted_on": date.today().isoformat(),
+        "predicted_on": paris_today(),
     })
-    rows.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
-    print("Saved", len(rows), "predictions to", path)
+    replace_day(rows, "workspace.gold.predictions", path, "predicted_on", paris_today())
 
 #================================================================================================
 
@@ -70,8 +111,8 @@ def main():
     print(LOGO)
     print("=" * 100)
 
-    model = load_model(path=os.path.join(MODELS_DIR, "best_model.joblib"))
-    name = load_best_name(path=os.path.join(MODELS_DIR, "best_models.csv"))
+    model = load_model(path=f"{MODELS_DIR}/best_model.joblib")
+    name = load_best_name(path=f"{MODELS_DIR}/best_models.csv")
 
     if print_setting:
         print('model')
@@ -80,8 +121,8 @@ def main():
 
     print("Loaded:", name)
 
-    d1 = make_d1_features(verbose=print_setting)
-    X = d1.drop(columns=["ts"])
+    d1 = get_d1_features(verbose=print_setting)
+    X = d1[FEATURES]
 
     if X.isna().any().any():
         raise ValueError("D+1 features have missing values, cannot predict")
