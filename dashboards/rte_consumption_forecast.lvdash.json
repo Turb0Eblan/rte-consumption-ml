@@ -1,0 +1,248 @@
+{
+  "datasets": [
+    {
+      "name": "22912a78",
+      "displayName": "best_models_15d",
+      "queryLines": [
+        "SELECT\n",
+        "  date,\n",
+        "  estimator,\n",
+        "  mape * 100 AS mape_pct,\n",
+        "  logged_at\n",
+        "FROM workspace.gold.best_models\n",
+        "WHERE date >= current_date() - INTERVAL 15 DAYS\n",
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY date ORDER BY logged_at DESC) = 1\n",
+        "ORDER BY date"
+      ]
+    },
+    {
+      "name": "95451f8e",
+      "displayName": "predictions_15d",
+      "queryLines": [
+        "SELECT\n",
+        "  from_utc_timestamp(ts, 'Europe/Paris') AS ts_paris,\n",
+        "  prediction_mw,\n",
+        "  estimator,\n",
+        "  predicted_on\n",
+        "FROM workspace.gold.predictions\n",
+        "WHERE ts >= current_date() - INTERVAL 15 DAYS\n",
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY ts ORDER BY predicted_on DESC) = 1\n",
+        "ORDER BY ts"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "496df1b3",
+      "displayName": "Forecast",
+      "layout": [
+        {
+          "widget": {
+            "name": "ec79943c",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# RTE electricity consumption: D+1 forecast\n",
+                "\n",
+                "Daily job: model search -> best model -> forecast for tomorrow (30-min resolution, Paris time)"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "best-model-per-day-mape",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "22912a78",
+                  "fields": [
+                    {
+                      "name": "date",
+                      "expression": "`date`"
+                    },
+                    {
+                      "name": "estimator",
+                      "expression": "`estimator`"
+                    },
+                    {
+                      "name": "mape_pct",
+                      "expression": "`mape_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Best model per day (MAPE, %)",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "date"
+                  },
+                  {
+                    "fieldName": "estimator"
+                  },
+                  {
+                    "fieldName": "mape_pct"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "best-model-mape-over-time",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "22912a78",
+                  "fields": [
+                    {
+                      "name": "daily(date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `date`)"
+                    },
+                    {
+                      "name": "sum(mape_pct)",
+                      "expression": "SUM(`mape_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Best model MAPE over time (%)",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "daily(date)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(mape_pct)",
+                  "displayName": "MAPE, %",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "d1-consumption-forecast-mw-paris-time",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "95451f8e",
+                  "fields": [
+                    {
+                      "name": "minutely(ts_paris)",
+                      "expression": "DATE_TRUNC(\"MINUTE\", `ts_paris`)"
+                    },
+                    {
+                      "name": "sum(prediction_mw)",
+                      "expression": "SUM(`prediction_mw`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "D+1 consumption forecast (MW, Paris time)",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "minutely(ts_paris)",
+                  "displayName": "Time (Paris)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(prediction_mw)",
+                  "displayName": "Forecast",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 12,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
