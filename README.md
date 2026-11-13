@@ -144,6 +144,15 @@ and times we write come from `paris_today()` and `paris_now()` in
 It has a table with the best estimator per day, a line chart of its MAPE, and
 the D+1 forecast curve.
 
+Published dashboard (needs access to our Databricks workspace):
+https://dbc-ef009879-5f31.cloud.databricks.com/dashboardsv3/01f1d62896c210f583c1e76b01fb0289/published?o=7474654333598189
+
+![Dashboard on 2026-11-13](docs/dashboard.png)
+
+Screenshot from 2026-11-13. The weekend profile (Nov 7-8, Nov 14) is lower
+and flatter than weekdays. The dip in MAPE on Nov 8 is the RANSAC case
+explained in Results.
+
 The exported definition is in `dashboards/rte_consumption_forecast.lvdash.json`.
 It can be imported in another workspace with Dashboards -> Create -> Import
 dashboard from file.
