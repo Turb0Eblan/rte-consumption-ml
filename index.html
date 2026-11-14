@@ -78,11 +78,55 @@ button.on{background:var(--ink);color:var(--paper)}
 .foot a{color:var(--blue)}
 .mini text{font-family:"Source Serif 4",serif}
 @media (prefers-reduced-motion: reduce){ .packet,.anim{display:none} }
+/* 16:9 stage: a fixed 1600x900 canvas scaled to fit the window */
+.top{display:flex;align-items:center;gap:20px}
+.top .heading{flex:1;text-align:center}
+.top .brand{margin:0;width:230px}
+.fs svg{width:18px;height:18px;flex:none}
+.fs{display:inline-flex;align-items:center;gap:8px;width:auto}
+.top .fs{margin-left:auto}
+.controls .hint{margin:0;align-self:center}
+.right{display:flex;flex-direction:column;gap:16px}
+.panel.text{overflow:auto}
+@media (min-width:760px){
+  html,body{height:100%;overflow:hidden}
+  .viewport{position:fixed;inset:0}
+  .canvas{position:absolute;left:50%;top:50%;width:1600px;height:900px;
+    transform:translate(-50%,-50%) scale(var(--s,1));transform-origin:center;
+    display:grid;grid-template-columns:1060px 1fr;grid-template-rows:auto 1fr auto;gap:14px 26px;padding:22px 32px 16px}
+  .top{grid-column:1/-1}
+  .top .fs{width:230px;justify-content:center}
+  h1{font-size:40px;margin:0 0 6px}
+  .givens{font-size:18px;margin:0}
+  .left{display:flex;flex-direction:column;gap:14px;min-height:0}
+  .controls{justify-content:flex-start;margin:0}
+  .hint{font-size:13px}
+  .eqs{margin:0;gap:22px}
+  .eq{font-size:21px;line-height:1.8}
+  .boxed{font-size:22px}
+  .right{min-height:0}
+  .panel.text{flex:1;min-height:0;padding:16px 20px}
+  .panel h2{font-size:24px}
+  .panel p{font-size:16px;margin:6px 0}
+  .panel ul{font-size:15.5px;line-height:1.45}
+  .minibox{flex:none;padding:10px 14px}
+  .foot{grid-column:1/-1;margin:0}
+}
+@media (max-width:759px){
+  .wrap,.canvas{padding:24px 16px 40px}
+  .top{flex-wrap:wrap;justify-content:center}
+  .top .brand{width:auto}
+  .top .fs{display:none}
+  .left,.right{margin-top:18px}
+}
+:fullscreen body,:fullscreen{background:var(--bg2)}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="viewport"><div class="canvas" id="canvas">
+<header class="top">
   <div class="brand"><span class="dot">⚡</span>ENSE3 ML · group 4</div>
+  <div class="heading">
   <h1>Tomorrow's electricity, every half hour</h1>
   <div class="givens">
     <span>France, <b>48</b> half-hours of D+1</span>
@@ -90,6 +134,10 @@ button.on{background:var(--ink);color:var(--paper)}
     <span>best MAPE <b>3.14 %</b></span>
     <span>job at <b>06:00</b> Paris</span>
   </div>
+  </div>
+  <button id="fs" class="fs" title="Full screen (F)" aria-label="Full screen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path id="fsIcon" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span id="fsLabel">Full screen</span></button>
+</header>
+<div class="left">
 
   <div class="stage" id="stage">
     <svg viewBox="0 0 1200 466" role="img" aria-labelledby="t1">
@@ -209,12 +257,7 @@ button.on{background:var(--ink);color:var(--paper)}
   <div class="controls">
     <button id="play" class="on" aria-pressed="true">Pause flow</button>
     <button id="run">Simulate one 06:00 run</button>
-  </div>
-  <p class="hint">Blocks are clickable. The dots are data moving between layers.</p>
-
-  <div class="detail">
-    <div class="panel" id="panel" aria-live="polite"></div>
-    <div class="panel"><svg class="mini" id="mini" viewBox="0 0 420 300" role="img" aria-label="Detail diagram"></svg></div>
+    <span class="hint">Click any block to open it. The dots are data moving between layers.</span>
   </div>
 
   <div class="eqs">
@@ -225,9 +268,14 @@ button.on{background:var(--ink);color:var(--paper)}
     </div>
     <div class="boxed">best model today<br><span class="big">OMP · 3.14 %</span><small>OrthogonalMatchingPursuit, validation MAPE</small></div>
   </div>
+</div>
+<div class="right">
+  <div class="panel text" id="panel" aria-live="polite"></div>
+  <div class="panel minibox"><svg class="mini" id="mini" viewBox="0 0 420 300" role="img" aria-label="Detail diagram"></svg></div>
+</div>
 
   <div class="foot">Artur Nam &amp; Fady Abuisaac · ENSE3 2026 · data: RTE open data · <a href="https://github.com/Turb0Eblan/rte-consumption-ml">source code</a></div>
-</div>
+</div></div>
 
 <script>
 const NS = "http://www.w3.org/2000/svg";
@@ -473,6 +521,37 @@ runBtn.onclick = async () => {
   minH.removeAttribute("transform"); hourH.removeAttribute("transform");
   runBtn.disabled = false;
 };
+
+// scale the 16:9 canvas to the window
+const canvas = document.getElementById("canvas");
+function fit() {
+  const s = Math.min(innerWidth / 1600, innerHeight / 900);
+  canvas.style.setProperty("--s", s);
+}
+addEventListener("resize", fit); fit();
+
+// full screen
+const fsBtn = document.getElementById("fs");
+const root = document.documentElement;
+if (!root.requestFullscreen && !root.webkitRequestFullscreen) fsBtn.style.display = "none";
+function toggleFs() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else {
+    (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+  }
+}
+fsBtn.onclick = toggleFs;
+addEventListener("keydown", e => { if ((e.key === "f" || e.key === "F") && !e.metaKey && !e.ctrlKey && !e.altKey) toggleFs(); });
+function onFs() {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.getElementById("fsLabel").textContent = on ? "Exit full screen" : "Full screen";
+  document.getElementById("fsIcon").setAttribute("d", on ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5");
+  fsBtn.setAttribute("aria-pressed", String(on));
+  setTimeout(fit, 50);
+}
+document.addEventListener("fullscreenchange", onFs);
+document.addEventListener("webkitfullscreenchange", onFs);
 </script>
 </body>
 </html>
